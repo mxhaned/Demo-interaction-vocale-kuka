@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interaction par reconnaissance vocale avec le robot kuka</title>
+<style>
+/* ------------------------------------------------------------------
+   Interaction vocale / robot industriel — feuille de style intégrée
+   Palette : graphite + acier + orange sécurité
+------------------------------------------------------------------ */
+:root{
+  --bg:#0b0d10;
+  --panel:#14181e;
+  --panel2:#10141a;
+  --line:#242b34;
+  --line2:#333c48;
+  --txt:#e7ebf1;
+  --dim:#98a3b2;
+  --dim2:#66707e;
+  --acc:#ff7a1a;
+  --acc2:#ffb45c;
+  --ok:#39d98a;
+  --err:#ff5a5f;
+  --steel:#7e8b9a;
+  --mono:ui-monospace,SFMono-Regular,"JetBrains Mono","DejaVu Sans Mono",Menlo,Consolas,monospace;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --radius:4px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100vh;
+  font-family:var(--sans);
+  color:var(--txt);
+  background:
+    radial-gradient(1100px 520px at 18% -12%, #1b212a 0%, transparent 62%),
+    repeating-linear-gradient(0deg, transparent 0 39px, rgba(255,255,255,.018) 39px 40px),
+    repeating-linear-gradient(90deg, transparent 0 39px, rgba(255,255,255,.018) 39px 40px),
+    var(--bg);
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1560px;margin:0 auto;padding:26px 26px 56px}
+
+/* ---------- En-tête ---------- */
+.masthead-top{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--dim2);
+}
+.tag{
+  color:var(--acc);border:1px solid rgba(255,122,26,.38);
+  background:rgba(255,122,26,.07);
+  padding:4px 9px;border-radius:2px;
+}
+.sep{flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+h1{
+  margin:16px 0 0;
+  font-size:clamp(22px,3.1vw,38px);
+  line-height:1.14;
+  font-weight:800;
+  letter-spacing:-.018em;
+}
+h1 em{font-style:normal;color:var(--acc)}
+.lede{
+  margin:12px 0 0;max-width:74ch;
+  font-family:var(--mono);font-size:12.5px;line-height:1.75;color:var(--dim);
+}
+.hazard{
+  height:5px;margin:20px 0 22px;border-radius:2px;
+  background:repeating-linear-gradient(115deg,var(--acc) 0 14px,#171b21 14px 28px);
+  opacity:.85;
+}
+
+/* ---------- Grille des deux lecteurs ---------- */
+.decks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+@media (max-width:980px){.decks{grid-template-columns:1fr}}
+
+.panel{
+  background:linear-gradient(180deg,var(--panel) 0%,var(--panel2) 100%);
+  border:1px solid var(--line);border-radius:var(--radius);
+  display:flex;flex-direction:column;overflow:hidden;
+  transition:border-color .18s ease, box-shadow .18s ease;
+}
+.panel.is-drag{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc),0 0 34px rgba(255,122,26,.16)}
+
+.phead{
+  display:flex;align-items:center;gap:12px;
+  padding:11px 14px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#181d24,#141920);
+}
+.idx{
+  font-family:var(--mono);font-size:11px;color:#0b0d10;background:var(--steel);
+  padding:2px 6px;border-radius:2px;font-weight:700;letter-spacing:.06em;
+}
+.panel[data-side="res"] .idx{background:var(--acc)}
+.phead h2{
+  margin:0;font-family:var(--mono);font-size:13px;font-weight:700;
+  letter-spacing:.18em;text-transform:uppercase;
+}
+.role{
+  font-family:var(--mono);font-size:10.5px;color:var(--dim2);
+  letter-spacing:.1em;text-transform:uppercase;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.phead .spacer{flex:1}
+.led{
+  width:9px;height:9px;border-radius:50%;flex:none;
+  background:#39404a;box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.led[data-state="ready"]{background:var(--steel);box-shadow:0 0 8px rgba(126,139,154,.7)}
+.led[data-state="play"]{background:var(--acc);box-shadow:0 0 10px rgba(255,122,26,.85);animation:pulse 1.4s infinite}
+.led[data-state="err"]{background:var(--err);box-shadow:0 0 9px rgba(255,90,95,.8)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ---------- Scène vidéo ---------- */
+.stage{position:relative;background:#000;aspect-ratio:16/9;overflow:hidden}
+.stage video{width:100%;height:100%;object-fit:contain;display:block;background:#000}
+.panel.is-empty .stage video{visibility:hidden}
+.ticks{position:absolute;inset:9px;pointer-events:none}
+.ticks::before,.ticks::after{
+  content:"";position:absolute;width:15px;height:15px;
+  border:1px solid var(--acc);opacity:.55;
+}
+.ticks::before{top:0;left:0;border-right:0;border-bottom:0}
+.ticks::after{bottom:0;right:0;border-left:0;border-top:0}
+
+.drop{
+  position:absolute;inset:0;display:none;
+  flex-direction:column;align-items:center;justify-content:center;gap:7px;
+  text-align:center;padding:22px;
+  background:
+    repeating-linear-gradient(45deg,rgba(255,255,255,.014) 0 10px,transparent 10px 20px),
+    #0d1116;
+  cursor:pointer;
+}
+.panel.is-empty .drop{display:flex}
+.drop svg{opacity:.6}
+.drop-title{margin:6px 0 0;font-size:14px;font-weight:600}
+.drop-sub{margin:0;font-family:var(--mono);font-size:11.5px;color:var(--dim2)}
+.linkbtn{
+  background:none;border:0;padding:0;cursor:pointer;
+  font:inherit;color:var(--acc);text-decoration:underline;text-underline-offset:3px;
+}
+.linkbtn:hover{color:var(--acc2)}
+.dragmask{
+  position:absolute;inset:0;display:none;pointer-events:none;
+  align-items:center;justify-content:center;
+  background:rgba(255,122,26,.12);
+  border:2px dashed var(--acc);
+}
+.panel.is-drag .dragmask{display:flex}
+.panel.is-drag .drop{visibility:hidden}   /* le masque de dépôt reste seul lisible */
+.dragmask span{
+  font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+  color:#0b0d10;background:var(--acc);padding:6px 12px;border-radius:2px;font-weight:700;
+}
+.errbox{
+  position:absolute;left:12px;right:12px;bottom:12px;display:none;
+  font-family:var(--mono);font-size:11.5px;line-height:1.6;
+  color:#ffd9da;background:rgba(255,90,95,.14);
+  border:1px solid rgba(255,90,95,.45);border-radius:2px;padding:8px 10px;
+}
+.panel.is-err .errbox{display:block}
+
+/* ---------- Pied de panneau ---------- */
+.pfoot{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:11px 14px;border-top:1px solid var(--line);background:#12161c;
+}
+.file{display:flex;align-items:center;gap:9px;min-width:0;flex:1}
+.badge{
+  font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.12em;
+  padding:3px 6px;border-radius:2px;flex:none;
+  color:var(--dim);border:1px solid var(--line2);background:#171c23;
+}
+.badge[data-kind="user"]{color:#0b0d10;background:var(--acc);border-color:var(--acc)}
+.badge[data-kind="default"]{color:var(--steel);border-color:var(--line2)}
+.fname{
+  font-family:var(--mono);font-size:12px;color:var(--txt);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+}
+.panel.is-empty .fname{color:var(--dim2)}
+.meta{
+  font-family:var(--mono);font-size:10.5px;color:var(--dim2);
+  letter-spacing:.05em;white-space:nowrap;
+}
+
+/* ---------- Boutons ---------- */
+.btn{
+  font-family:var(--mono);font-size:11px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;
+  color:var(--txt);background:#1b2129;border:1px solid var(--line2);
+  padding:8px 12px;border-radius:2px;cursor:pointer;white-space:nowrap;
+  transition:background .15s ease,border-color .15s ease,color .15s ease,transform .05s ease;
+}
+.btn:hover:not(:disabled){background:#232b35;border-color:#46525f}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn.primary{
+  color:#0b0d10;background:var(--acc);border-color:var(--acc);
+}
+.btn.primary:hover:not(:disabled){background:var(--acc2);border-color:var(--acc2)}
+.btn.icon{padding:8px 10px;font-size:12px;letter-spacing:0}
+.btn.on{color:var(--acc);border-color:rgba(255,122,26,.5)}
+.btn:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
+
+/* ---------- Pupitre de commande ---------- */
+.console{
+  margin-top:18px;padding:14px 16px;
+  border:1px solid var(--line);border-radius:var(--radius);
+  background:linear-gradient(180deg,#161b22,#11151b);
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+.console .grp{display:flex;align-items:center;gap:8px}
+.console .divider{width:1px;height:26px;background:var(--line2)}
+.console .spacer{flex:1}
+.readout{
+  font-family:var(--mono);font-size:11px;color:var(--dim);
+  border:1px solid var(--line);background:#0d1116;border-radius:2px;
+  padding:7px 10px;letter-spacing:.08em;white-space:nowrap;
+}
+.readout b{color:var(--acc);font-weight:700}
+#status{
+  font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--dim2);
+}
+#status.ok{color:var(--ok)}
+#status.warn{color:var(--acc2)}
+#status.err{color:var(--err)}
+
+/* champ de décalage + lisibilité de l'écart */
+.offlab{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--dim2);
+}
+#offset{
+  width:66px;font-family:var(--mono);font-size:12.5px;color:var(--acc);
+  background:#0d1116;border:1px solid var(--line2);border-radius:2px;
+  padding:7px 8px;text-align:right;
+}
+#offset:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 1px rgba(255,122,26,.4)}
+.unit{font-family:var(--mono);font-size:11px;color:var(--dim2)}
+#drift{display:inline-block;min-width:92px;text-align:right;font-variant-numeric:tabular-nums}
+
+footer{
+  margin-top:22px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:#4d5764;
+}
+kbd{
+  font-family:var(--mono);font-size:10px;color:var(--dim);
+  border:1px solid var(--line2);border-bottom-width:2px;border-radius:3px;
+  padding:1px 5px;background:#171c23;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="masthead-top">
+      <span class="tag">KUKA · Poste de démonstration</span>
+      <span>Flux 01 — Caméra</span>
+      <span>Flux 02 — Réponse robot</span>
+      <span class="sep"></span>
+      <span id="clock">--:--:--</span>
+    </div>
+    <h1>Interaction par reconnaissance vocale<br><em>avec un robot industriel</em></h1>
+    <p class="lede">
+      Commande vocale de l’opérateur, puis exécution du mouvement par le robot.
+      Les deux flux sont verrouillés l’un sur l’autre : le flux 02 démarre avec un
+      décalage réglable sur le flux 01, et ce décalage est tenu en permanence — pause,
+      déplacement dans la timeline ou ralentissement du réseau compris.
+    </p>
+  </header>
+
+  <div class="hazard" aria-hidden="true"></div>
+
+  <main class="decks">
+
+    <!-- ============ Panneau 01 — Caméra ============ -->
+    <section class="panel" data-side="cam" aria-label="Caméra — commande vocale">
+      <div class="phead">
+        <span class="idx">01</span>
+        <h2>Caméra</h2>
+        <span class="role">Opérateur · commande vocale</span>
+        <span class="spacer"></span>
+        <button class="btn icon" data-act="fit" title="Remplir le cadre" aria-label="Cadrage de l’image">⤡</button>
+        <button class="btn icon" data-act="mute" title="Couper le son de ce flux" aria-label="Couper le son">♪</button>
+        <span class="led" data-state="idle" title="État du flux"></span>
+      </div>
+
+      <div class="stage">
+        <video playsinline preload="metadata" controls controlsList="nodownload"></video>
+        <div class="ticks" aria-hidden="true"></div>
+        <div class="drop">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#ff7a1a" stroke-width="1.4">
+            <rect x="2.5" y="5" width="19" height="14" rx="1.5"/>
+            <path d="M2.5 9h19M7 5v4M17 5v4"/>
+            <path d="M12 16.5v-6M9.5 13L12 10.5 14.5 13"/>
+          </svg>
+          <p class="drop-title">Déposer un fichier vidéo</p>
+          <p class="drop-sub">ou <button class="linkbtn" data-act="browse">parcourir les fichiers…</button></p>
+          <p class="drop-sub"><button class="linkbtn" data-act="default">rétablir la vidéo par défaut</button></p>
+        </div>
+        <div class="dragmask"><span>Déposer ici</span></div>
+        <div class="errbox"></div>
+      </div>
+
+      <div class="pfoot">
+        <div class="file">
+          <span class="badge" data-kind="none">—</span>
+          <span class="fname">aucun fichier</span>
+        </div>
+        <span class="meta"></span>
+        <button class="btn" data-act="browse">Charger</button>
+        <button class="btn" data-act="clear">Retirer</button>
+      </div>
+
+      <input type="file" accept="video/*,.mov,.mp4,.webm,.mkv,.m4v" hidden>
+    </section>
+
+    <!-- ============ Panneau 02 — Réponse ============ -->
+    <section class="panel" data-side="res" aria-label="Réponse — exécution par le robot">
+      <div class="phead">
+        <span class="idx">02</span>
+        <h2>Réponse</h2>
+        <span class="role">Robot · exécution de la commande</span>
+        <span class="spacer"></span>
+        <button class="btn icon" data-act="fit" title="Remplir le cadre" aria-label="Cadrage de l’image">⤡</button>
+        <button class="btn icon" data-act="mute" title="Couper le son de ce flux" aria-label="Couper le son">♪</button>
+        <span class="led" data-state="idle" title="État du flux"></span>
+      </div>
+
+      <div class="stage">
+        <video playsinline preload="metadata" controls controlsList="nodownload"></video>
+        <div class="ticks" aria-hidden="true"></div>
+        <div class="drop">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#ff7a1a" stroke-width="1.4">
+            <rect x="2.5" y="5" width="19" height="14" rx="1.5"/>
+            <path d="M2.5 9h19M7 5v4M17 5v4"/>
+            <path d="M12 16.5v-6M9.5 13L12 10.5 14.5 13"/>
+          </svg>
+          <p class="drop-title">Déposer un fichier vidéo</p>
+          <p class="drop-sub">ou <button class="linkbtn" data-act="browse">parcourir les fichiers…</button></p>
+          <p class="drop-sub"><button class="linkbtn" data-act="default">rétablir la vidéo par défaut</button></p>
+        </div>
+        <div class="dragmask"><span>Déposer ici</span></div>
+        <div class="errbox"></div>
+      </div>
+
+      <div class="pfoot">
+        <div class="file">
+          <span class="badge" data-kind="none">—</span>
+          <span class="fname">aucun fichier</span>
+        </div>
+        <span class="meta"></span>
+        <button class="btn" data-act="browse">Charger</button>
+        <button class="btn" data-act="clear">Retirer</button>
+      </div>
+
+      <input type="file" accept="video/*,.mov,.mp4,.webm,.mkv,.m4v" hidden>
+    </section>
+  </main>
+
+  <!-- ============ Pupitre ============ -->
+  <div class="console">
+    <div class="grp">
+      <button class="btn primary" id="playBoth">▶ Lire les deux ensemble</button>
+      <button class="btn" id="toggle">❚❚ Pause</button>
+      <button class="btn" id="back5" title="Reculer les deux flux de 5 s">⏪ −5 s</button>
+      <button class="btn" id="fwd5" title="Avancer les deux flux de 5 s">⏩ +5 s</button>
+      <button class="btn" id="resetBoth">⟲ Retour à 0</button>
+    </div>
+    <div class="divider"></div>
+    <div class="grp">
+      <label class="offlab" for="offset">Départ 02 après 01</label>
+      <input id="offset" type="number" value="3" min="0" max="120" step="0.1" inputmode="decimal">
+      <span class="unit">s</span>
+    </div>
+    <div class="divider"></div>
+    <div class="grp">
+      <button class="btn" id="resync">⟳ Resynchroniser</button>
+      <button class="btn on" id="lock" aria-pressed="true" title="Verrou de synchronisation">🔒 Verrou</button>
+      <span class="readout">Écart <b id="drift">—</b></span>
+    </div>
+    <span class="spacer"></span>
+    <span id="status">En attente</span>
+  </div>
+
+  <footer>
+    <span><kbd>Espace</kbd> lire / pause &nbsp;·&nbsp; <kbd>←</kbd> <kbd>→</kbd> ±5 s sur les deux &nbsp;·&nbsp; <kbd>R</kbd> retour à zéro</span>
+    <span>Page autonome — aucune dépendance, aucun serveur</span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ==================================================================
+     Vidéos par défaut : relatif d'abord, repli sur le chemin absolu.
+  ================================================================== */
+  var DEFAULTS = {
+    cam: { name: "camera_commande_vocale.mp4",   dir: "" },
+    res: { name: "reponse_robot_execution.mp4",  dir: "" }
+  };
+  function relURL(d){ return encodeURIComponent(d.name); }
+  function absURL(d){ return d.dir.split("/").map(encodeURIComponent).join("/") + encodeURIComponent(d.name); }
+
+  /* ==================================================================
+     Réglages du verrou de synchronisation
+  ================================================================== */
+  var HARD = 0.35;   // s  — au-delà de cet écart : recalage sec
+  var SOFT = 0.06;   // s  — en deçà : on ne touche à rien
+  var MAXR = 0.06;   // ±6 % de vitesse pour rattraper sans saut visible
+  var TICK = 150;    // ms — période de surveillance
+
+  var statusEl  = document.getElementById("status");
+  var driftEl   = document.getElementById("drift");
+  var offsetIn  = document.getElementById("offset");
+  var btnPlay   = document.getElementById("playBoth");
+  var btnTog    = document.getElementById("toggle");
+  var btnReset  = document.getElementById("resetBoth");
+  var btnResync = document.getElementById("resync");
+  var btnBack5  = document.getElementById("back5");
+  var btnFwd5   = document.getElementById("fwd5");
+  var btnLock   = document.getElementById("lock");
+
+  function setStatus(m,k){ statusEl.textContent = m; statusEl.className = k || ""; }
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+  function fmtS(x){ return (Math.round(x*10)/10).toFixed(1).replace(".", ","); }
+  function fmtTime(s){
+    if(!isFinite(s) || s < 0) return "--:--";
+    var m = Math.floor(s/60), r = Math.floor(s%60);
+    return (m<10?"0":"")+m+":"+(r<10?"0":"")+r;
+  }
+  function fmtSize(b){
+    if(b < 1048576) return (b/1024).toFixed(0)+" Ko";
+    if(b < 1073741824) return (b/1048576).toFixed(1)+" Mo";
+    return (b/1073741824).toFixed(2)+" Go";
+  }
+
+  /* ==================================================================
+     Panneau
+  ================================================================== */
+  function Panel(root){
+    var p = {
+      root: root,
+      side: root.dataset.side,
+      def:  DEFAULTS[root.dataset.side],
+      video:  root.querySelector("video"),
+      input:  root.querySelector('input[type="file"]'),
+      stage:  root.querySelector(".stage"),
+      badge:  root.querySelector(".badge"),
+      fname:  root.querySelector(".fname"),
+      meta:   root.querySelector(".meta"),
+      role:   root.querySelector(".role"),
+      led:    root.querySelector(".led"),
+      errbox: root.querySelector(".errbox"),
+      btnClear: root.querySelector('.pfoot [data-act="clear"]'),
+      mode: "empty",     // empty | default | user
+      url:  null,
+      size: 0,
+      cover: false,
+      triedAbs: false,
+      buffering: false,  // le flux attend des données
+      progSeek: false,   // déplacement provoqué par le programme
+      expectPlay: false, // lecture provoquée par le programme
+      expectPause: false // pause provoquée par le programme
+    };
+
+    function setLed(s){ p.led.dataset.state = s; }
+    function clearError(){ p.root.classList.remove("is-err"); p.errbox.textContent = ""; }
+    function showError(m){ p.root.classList.add("is-err"); p.errbox.textContent = m; setLed("err"); }
+    function revoke(){ if(p.url){ URL.revokeObjectURL(p.url); p.url = null; } }
+    function chrome(){
+      p.root.classList.toggle("is-empty", p.mode === "empty");
+      p.btnClear.disabled = (p.mode === "empty");
+      p.btnClear.title = p.mode === "user"
+        ? "Retirer ce fichier et revenir à la vidéo par défaut"
+        : "Vider ce panneau";
+    }
+
+    p.hasSource = function(){ return p.mode !== "empty"; };
+    p.setLed = setLed;
+
+    p.loadFile = function(file){
+      if(!file) return;
+      var ok = /^video\//.test(file.type || "") || /\.(mp4|mov|m4v|webm|ogv|ogg|mkv|avi)$/i.test(file.name);
+      if(!ok){ setStatus("Fichier ignoré : « " + file.name + " » n’est pas une vidéo", "err"); return; }
+      revoke(); clearError();
+      p.url = URL.createObjectURL(file);
+      p.mode = "user"; p.size = file.size; p.buffering = false;
+      p.video.src = p.url; p.video.load();
+      p.badge.dataset.kind = "user"; p.badge.textContent = "Local";
+      p.fname.textContent = file.name; p.fname.title = file.name;
+      p.meta.textContent = fmtSize(file.size);
+      chrome(); setLed("ready");
+      setStatus("Chargé — " + file.name, "ok");
+      sync.wanted = false; updateToggle();
+    };
+
+    p.loadDefault = function(){
+      revoke(); clearError();
+      p.triedAbs = false; p.mode = "default"; p.size = 0; p.buffering = false;
+      p.video.src = relURL(p.def); p.video.load();
+      p.badge.dataset.kind = "default"; p.badge.textContent = "Défaut";
+      p.fname.textContent = p.def.name; p.fname.title = p.def.dir + p.def.name;
+      p.meta.textContent = "";
+      chrome(); setLed("ready");
+    };
+
+    p.clear = function(){
+      revoke(); clearError();
+      p.mode = "empty"; p.size = 0; p.buffering = false;
+      p.video.pause(); p.video.removeAttribute("src"); p.video.load();
+      p.badge.dataset.kind = "none"; p.badge.textContent = "—";
+      p.fname.textContent = "aucun fichier"; p.fname.title = "";
+      p.meta.textContent = "";
+      chrome(); setLed("idle");
+      sync.wanted = false; updateToggle();
+    };
+
+    p.remove = function(){
+      if(p.mode === "user"){ p.loadDefault(); setStatus("Fichier retiré — vidéo par défaut rétablie", "warn"); }
+      else if(p.mode === "default"){ p.clear(); setStatus("Panneau vidé", "warn"); }
+    };
+
+    /* --- déplacements et transitions provoqués par le programme --- */
+    p.seekTo = function(t){
+      var d = p.video.duration;
+      t = Math.max(0, isFinite(d) ? Math.min(t, d) : t);
+      if(Math.abs(p.video.currentTime - t) < 0.02) return;
+      p.progSeek = true;
+      clearTimeout(p.progTimer);
+      p.progTimer = setTimeout(function(){ p.progSeek = false; }, 800);
+      try{ p.video.currentTime = t; }catch(e){ p.progSeek = false; }
+    };
+    p.play = function(){
+      if(!p.hasSource() || !p.video.paused) return;
+      p.expectPlay = true;
+      var r = p.video.play();
+      if(r && r.catch) r.catch(function(err){
+        p.expectPlay = false;
+        if(err && err.name === "NotAllowedError")
+          setStatus("Lecture bloquée par le navigateur — cliquez sur « Lire les deux ensemble »", "err");
+      });
+    };
+    p.pause = function(){
+      if(!p.hasSource() || p.video.paused) return;
+      p.expectPause = true;
+      p.video.pause();
+    };
+
+    /* --- boutons du panneau --- */
+    root.addEventListener("click", function(e){
+      var b = e.target.closest("[data-act]");
+      if(!b || !root.contains(b)) return;
+      var act = b.dataset.act;
+      if(act === "browse") p.input.click();
+      else if(act === "clear") p.remove();
+      else if(act === "default"){ p.loadDefault(); setStatus("Vidéo par défaut rétablie", "ok"); }
+      else if(act === "fit"){
+        p.cover = !p.cover;
+        p.video.style.objectFit = p.cover ? "cover" : "contain";
+        b.classList.toggle("on", p.cover);
+        b.title = p.cover ? "Afficher l’image entière" : "Remplir le cadre";
+      }
+      else if(act === "mute"){
+        p.video.muted = !p.video.muted;
+        b.classList.toggle("on", p.video.muted);
+        b.textContent = p.video.muted ? "✕" : "♪";
+        b.title = p.video.muted ? "Rétablir le son de ce flux" : "Couper le son de ce flux";
+      }
+    });
+
+    root.querySelector(".drop").addEventListener("click", function(e){
+      if(e.target.closest(".linkbtn")) return;
+      p.input.click();
+    });
+    p.input.addEventListener("change", function(){
+      if(p.input.files && p.input.files[0]) p.loadFile(p.input.files[0]);
+      p.input.value = "";
+    });
+
+    /* --- glisser-déposer --- */
+    var depth = 0;
+    root.addEventListener("dragenter", function(e){ e.preventDefault(); depth++; root.classList.add("is-drag"); });
+    root.addEventListener("dragover",  function(e){ e.preventDefault(); if(e.dataTransfer) e.dataTransfer.dropEffect = "copy"; });
+    root.addEventListener("dragleave", function(){ depth = Math.max(0, depth-1); if(!depth) root.classList.remove("is-drag"); });
+    root.addEventListener("drop", function(e){
+      e.preventDefault(); e.stopPropagation();
+      depth = 0; root.classList.remove("is-drag");
+      var f = e.dataTransfer && e.dataTransfer.files ? e.dataTransfer.files[0] : null;
+      if(f) p.loadFile(f);
+    });
+
+    /* --- événements du flux --- */
+    p.video.addEventListener("play", function(){
+      setLed("play");
+      if(p.expectPlay){ p.expectPlay = false; return; }
+      userPlay(p);                       // l'utilisateur a lancé ce flux
+    });
+    p.video.addEventListener("pause", function(){
+      if(p.hasSource() && !p.video.ended) setLed("ready");
+      if(p.expectPause){ p.expectPause = false; return; }
+      userPause(p);                      // l'utilisateur a mis ce flux en pause
+    });
+    p.video.addEventListener("seeked", function(){
+      if(p.progSeek){ p.progSeek = false; clearTimeout(p.progTimer); arbitrate(); return; }
+      userSeek(p);                       // l'utilisateur s'est déplacé dans ce flux
+    });
+    p.video.addEventListener("waiting", function(){ p.buffering = true;  setStatus("Mise en mémoire tampon…", "warn"); arbitrate(); });
+    p.video.addEventListener("stalled", function(){ p.buffering = true; });
+    p.video.addEventListener("playing", function(){ p.buffering = false; arbitrate(); });
+    p.video.addEventListener("canplay", function(){ p.buffering = false; });
+    p.video.addEventListener("canplaythrough", function(){ p.buffering = false; });
+    p.video.addEventListener("ended",  function(){ setLed("ready"); onEnded(p); });
+
+    p.video.addEventListener("loadedmetadata", function(){
+      clearError();
+      var d = p.video.duration, w = p.video.videoWidth, h = p.video.videoHeight, bits = [];
+      if(isFinite(d)) bits.push("durée " + fmtTime(d));
+      if(w && h) bits.push(w + "×" + h);
+      if(p.mode === "user" && p.size) bits.push(fmtSize(p.size));
+      p.meta.textContent = bits.join(" · ");
+      setLed("ready");
+    });
+
+    p.video.addEventListener("error", function(){
+      if(!p.hasSource()) return;
+      if(p.mode === "default" && !p.triedAbs && p.def.dir){   // repli chemin absolu
+        p.triedAbs = true; p.video.src = absURL(p.def); p.video.load(); return;
+      }
+      var where = p.mode === "default" ? (p.def.dir + p.def.name) : "le fichier sélectionné";
+      showError("Lecture impossible — " + where + ". Vérifiez que le fichier est présent, " +
+                "ou chargez une autre vidéo (codec non reconnu par ce navigateur ?).");
+      setStatus("Erreur de lecture sur le flux " + (p.side === "cam" ? "01" : "02"), "err");
+    });
+
+    p.loadDefault();
+    return p;
+  }
+
+  var panels = Array.prototype.map.call(document.querySelectorAll(".panel"), Panel);
+  var CAM = panels[0];   // maître
+  var RES = panels[1];   // asservi, démarre après le décalage
+
+  ["dragover","drop"].forEach(function(ev){
+    document.addEventListener(ev, function(e){ e.preventDefault(); });
+  });
+
+  /* ==================================================================
+     Moteur de synchronisation — 01 mène, 02 suit avec un décalage
+  ================================================================== */
+  var sync = { offset: 3, lock: true, wanted: false, holding: false };
+  var applying = false;
+
+  function ready(){ return CAM.hasSource() && RES.hasSource(); }
+  function starved(p){ return p.buffering || p.video.readyState < 2; }
+  function targetRes(){ return CAM.video.currentTime - sync.offset; }
+
+  function correct(t){
+    var s = RES.video, err = t - s.currentTime, a = Math.abs(err);
+    if(a > HARD){ RES.seekTo(t); s.playbackRate = 1; }
+    else if(a > SOFT){ s.playbackRate = clamp(1 + err * 0.6, 1 - MAXR, 1 + MAXR); }
+    else s.playbackRate = 1;
+  }
+
+  function arbitrate(){
+    if(applying) return;
+    if(!sync.lock || !ready()){ updateReadout(); return; }
+    applying = true;
+    var m = CAM.video, s = RES.video;
+    try{
+      if(!sync.wanted){ CAM.pause(); RES.pause(); s.playbackRate = 1; return; }
+
+      var t         = targetRes();
+      var waitPhase = t < 0;                       // 02 n'a pas encore sa place
+      var mStarv    = starved(CAM) && !m.ended;
+      var sStarv    = !waitPhase && !s.ended && starved(RES);
+
+      if(waitPhase){                               // attente du décalage
+        RES.pause();
+        if(s.currentTime > 0.05) RES.seekTo(0);
+        s.playbackRate = 1;
+        if(!m.ended) CAM.play();
+        return;
+      }
+
+      /* Un flux manque de données : l'autre l'attend, celui qui charge continue */
+      if(mStarv && !sStarv){ RES.pause(); CAM.play(); sync.holding = true; return; }
+      if(sStarv && !mStarv){ CAM.pause(); RES.play(); sync.holding = true; return; }
+      if(mStarv && sStarv){ CAM.play(); RES.play(); sync.holding = true; return; }
+
+      if(sync.holding){ sync.holding = false; setStatus("Reprise — flux réalignés", "ok"); }
+
+      if(!m.ended) CAM.play();
+      if(!s.ended) RES.play();
+      correct(t);
+    } finally {
+      applying = false;
+      updateReadout();
+    }
+  }
+
+  /* --- intentions de l'utilisateur (clic sur les commandes natives) --- */
+  function userPlay(p){
+    if(!sync.lock){ return; }
+    if(p === RES && ready()){                      // 02 relancé à la main : on rebase 01
+      CAM.seekTo(RES.video.currentTime + sync.offset);
+    }
+    sync.wanted = true; updateToggle(); arbitrate();
+  }
+  function userPause(p){
+    if(!sync.lock) return;
+    sync.wanted = false; updateToggle();
+    setStatus("En pause — les deux flux suivent", "warn");
+    arbitrate();
+  }
+  function userSeek(p){
+    if(!sync.lock || !ready()){ arbitrate(); return; }
+    if(p === RES){                                 // déplacement dans 02 : 01 se rebase
+      CAM.seekTo(RES.video.currentTime + sync.offset);
+      setStatus("Recalage depuis le flux 02", "ok");
+    } else {
+      RES.seekTo(Math.max(0, targetRes()));
+      setStatus("Recalage depuis le flux 01", "ok");
+    }
+    arbitrate();
+  }
+  function onEnded(p){
+    if(p === CAM){ sync.wanted = false; updateToggle(); setStatus("Fin de la séquence", "ok"); }
+  }
+
+  /* --- affichage de l'écart --- */
+  function updateReadout(){
+    if(!ready()){ driftEl.textContent = "—"; return; }
+    var t = targetRes();
+    if(t < 0){
+      driftEl.textContent = "02 dans " + fmtS(-t) + " s";
+      if(sync.wanted) setStatus("Flux 02 en attente du décalage de " + fmtS(sync.offset) + " s", "warn");
+      return;
+    }
+    if(!sync.lock){ driftEl.textContent = "verrou levé"; return; }
+    var err = Math.round((t - RES.video.currentTime) * 1000);
+    driftEl.textContent = (err > 0 ? "+" : "") + err + " ms";
+    if(sync.wanted && !sync.holding && Math.abs(err) < 120)
+      setStatus("Verrouillé · décalage " + fmtS(sync.offset) + " s", "ok");
+    else if(sync.holding)
+      setStatus("Mise en mémoire tampon — lecture suspendue", "warn");
+  }
+
+  /* --- commandes du pupitre --- */
+  function updateToggle(){
+    btnTog.textContent = sync.wanted ? "❚❚ Pause" : "▶ Reprendre";
+  }
+
+  function playBoth(){
+    if(!ready()){ setStatus("Deux vidéos sont nécessaires", "err"); return; }
+    CAM.seekTo(0); RES.seekTo(0);
+    RES.video.playbackRate = 1;
+    sync.wanted = true; sync.holding = false;
+    updateToggle();
+    setStatus("Lecture — 02 démarrera après " + fmtS(sync.offset) + " s", "ok");
+    arbitrate();
+  }
+  function togglePlay(){
+    if(!ready()){ setStatus("Deux vidéos sont nécessaires", "err"); return; }
+    sync.wanted = !sync.wanted;
+    updateToggle();
+    setStatus(sync.wanted ? "Reprise" : "En pause", sync.wanted ? "ok" : "warn");
+    arbitrate();
+  }
+  function resetBoth(){
+    sync.wanted = false; sync.holding = false;
+    updateToggle();
+    CAM.pause(); RES.pause();
+    CAM.seekTo(0); RES.seekTo(0);
+    RES.video.playbackRate = 1;
+    driftEl.textContent = "—";
+    setStatus("Retour au début", "warn");
+  }
+  /* Saut conjoint : les deux flux se déplacent du même pas, décalage conservé */
+  function jump(d){
+    if(!ready()){ setStatus("Deux vidéos sont nécessaires", "err"); return; }
+    var m = CAM.video;
+    var lim = isFinite(m.duration) ? m.duration : m.currentTime + Math.abs(d);
+    var t = clamp(m.currentTime + d, 0, lim);
+    CAM.seekTo(t);
+    RES.seekTo(Math.max(0, t - sync.offset));
+    RES.video.playbackRate = 1;
+    setStatus((d > 0 ? "Avance" : "Retour") + " de " + fmtS(Math.abs(d)) +
+              " s sur les deux flux · décalage " + fmtS(sync.offset) + " s tenu", "ok");
+    arbitrate();
+  }
+
+  function resync(){
+    if(!ready()){ setStatus("Deux vidéos sont nécessaires", "err"); return; }
+    var t = targetRes();
+    if(t < 0){ RES.seekTo(0); RES.pause(); setStatus("02 replacé au début — attente de " + fmtS(-t) + " s", "ok"); }
+    else { RES.seekTo(t); setStatus("Flux réalignés · décalage " + fmtS(sync.offset) + " s", "ok"); }
+    RES.video.playbackRate = 1;
+    arbitrate();
+  }
+  function setOffset(v){
+    sync.offset = clamp(isFinite(v) ? v : 3, 0, 120);
+    offsetIn.value = sync.offset;
+    RES.role.textContent = "Robot · exécution · départ +" + fmtS(sync.offset) + " s";
+    if(ready()) resync();
+  }
+  function toggleLock(){
+    sync.lock = !sync.lock;
+    btnLock.classList.toggle("on", sync.lock);
+    btnLock.setAttribute("aria-pressed", sync.lock ? "true" : "false");
+    btnLock.textContent = sync.lock ? "🔒 Verrou" : "🔓 Libre";
+    if(!sync.lock){ RES.video.playbackRate = 1; setStatus("Verrou levé — les deux flux sont indépendants", "warn"); }
+    else { setStatus("Verrou actif · décalage " + fmtS(sync.offset) + " s", "ok"); arbitrate(); }
+  }
+
+  btnPlay.addEventListener("click", playBoth);
+  btnTog.addEventListener("click", togglePlay);
+  btnReset.addEventListener("click", resetBoth);
+  btnResync.addEventListener("click", resync);
+  btnBack5.addEventListener("click", function(){ jump(-5); });
+  btnFwd5.addEventListener("click",  function(){ jump(+5); });
+  btnLock.addEventListener("click", toggleLock);
+  offsetIn.addEventListener("change", function(){ setOffset(parseFloat(offsetIn.value)); });
+  offsetIn.addEventListener("keydown", function(e){ if(e.key === "Enter") offsetIn.blur(); });
+
+  setInterval(arbitrate, TICK);
+
+  document.addEventListener("keydown", function(e){
+    var t = e.target;
+    if(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    if(e.code === "Space"){ e.preventDefault(); togglePlay(); }
+    else if(e.key === "ArrowLeft"){  e.preventDefault(); jump(-5); }
+    else if(e.key === "ArrowRight"){ e.preventDefault(); jump(+5); }
+    else if(e.key === "r" || e.key === "R"){ e.preventDefault(); resetBoth(); }
+  });
+
+  var clock = document.getElementById("clock");
+  (function ticktock(){
+    var d = new Date(), z = function(n){ return (n<10?"0":"")+n; };
+    clock.textContent = z(d.getHours())+":"+z(d.getMinutes())+":"+z(d.getSeconds());
+    setTimeout(ticktock, 1000);
+  })();
+
+  setOffset(3);
+  updateToggle();
+  setStatus("Prêt · 02 démarre 3 s après 01", "ok");
+})();
+</script>
+</body>
+</html>
