@@ -1,0 +1,2448 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Dossier de validation de models_best : pré-entraînement auto-supervisé noise-to-noise et distillation multi-professeurs pour la commande vocale du robot KUKA KR50. Méthode, architecture, paramètres, mesures et limites.">
+<meta name="author" content="mxhaned">
+<meta name="color-scheme" content="light dark">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Dossier models_best — Objectif spécifique 1, robot KUKA KR50">
+<meta property="og:description" content="Dossier de validation de models_best : pré-entraînement auto-supervisé noise-to-noise et distillation multi-professeurs pour la commande vocale du robot KUKA KR50. Méthode, architecture, paramètres, mesures et limites.">
+<meta property="og:url" content="https://mxhaned.github.io/Demo-interaction-vocale-kuka/rapport/">
+<meta property="og:locale" content="fr_FR">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Ctext%20y='.9em'%20font-size='90'%3E%F0%9F%8E%99%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link rel="canonical" href="https://mxhaned.github.io/Demo-interaction-vocale-kuka/rapport/">
+<script>
+try{
+  var t = localStorage.getItem("rapport-theme");
+  if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+}catch(e){}
+</script>
+<style>
+/* ══ Ce que fournissait l'hôte, désormais explicite ═══════════════════════ */
+:root{color-scheme:light}
+:root[data-theme="dark"]{color-scheme:dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark}}
+html{-webkit-text-size-adjust:100%}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+<title>Dossier models_best</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+/* ══ Jetons ══════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#F5F7F8; --surface:#FFFFFF; --surface-2:#EAEEF1; --surface-3:#F0F3F5;
+  --ink:#11171C; --ink-2:#3B4854; --muted:#68757F;
+  --rule:#D9DFE4; --rule-2:#BCC5CD;
+  --accent:#12507F; --accent-2:#1B6FA8; --accent-soft:#E3EDF4;
+  --good:#1A6549; --warn:#8A5600; --crit:#9E3324; --crit-soft:#F7E9E6;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4;
+  --pos:#2a78d6; --neg:#c0392b; --mid:#B9C0C7;
+  --chart:#FFFFFF; --grid:#E6EAEE;
+  --shadow:0 1px 2px rgba(17,23,28,.05), 0 8px 24px -14px rgba(17,23,28,.28);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#13161A; --surface:#191D22; --surface-2:#20262C; --surface-3:#1C2127;
+    --ink:#E8EDF1; --ink-2:#B2BEC8; --muted:#87939E;
+    --rule:#2A323A; --rule-2:#3A444E;
+    --accent:#79B2E8; --accent-2:#9BC8F2; --accent-soft:#152838;
+    --good:#4FBF8F; --warn:#D9A03A; --crit:#E8776A; --crit-soft:#2C1D1B;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
+    --pos:#3987e5; --neg:#e8776a; --mid:#4A545E;
+    --chart:#191D22; --grid:#262E35;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px -16px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#13161A; --surface:#191D22; --surface-2:#20262C; --surface-3:#1C2127;
+  --ink:#E8EDF1; --ink-2:#B2BEC8; --muted:#87939E;
+  --rule:#2A323A; --rule-2:#3A444E;
+  --accent:#79B2E8; --accent-2:#9BC8F2; --accent-soft:#152838;
+  --good:#4FBF8F; --warn:#D9A03A; --crit:#E8776A; --crit-soft:#2C1D1B;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
+  --pos:#3987e5; --neg:#e8776a; --mid:#4A545E;
+  --chart:#191D22; --grid:#262E35;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 28px -16px rgba(0,0,0,.7);
+}
+
+/* ══ Base ════════════════════════════════════════════════════════════════ */
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Serif",Georgia,"Times New Roman",serif;
+  font-size:16.5px; line-height:1.68;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4,.cond{font-family:"IBM Plex Sans Condensed","Helvetica Neue",Arial,sans-serif}
+code,kbd,.mono,th,.num{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+a{color:var(--accent);text-decoration-thickness:.06em;text-underline-offset:.18em}
+a:focus-visible,summary:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+
+.wrap{max-width:1240px;margin:0 auto;padding:0 22px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+@media(min-width:1120px){
+  .layout{grid-template-columns:210px minmax(0,1fr);gap:52px}
+}
+.prose{max-width:70ch}
+.prose p,.prose ul,.prose ol{margin:0 0 1.05em}
+.prose li{margin:.3em 0}
+
+/* ══ Nav ═════════════════════════════════════════════════════════════════ */
+nav.toc{display:none}
+@media(min-width:1120px){
+  nav.toc{display:block;position:sticky;top:0;align-self:start;max-height:100vh;overflow-y:auto;
+    padding:38px 0 60px;font-family:"IBM Plex Sans Condensed",sans-serif;font-size:13.5px;line-height:1.42}
+  nav.toc ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+  nav.toc a{display:flex;gap:9px;padding:5px 8px;border-radius:3px;color:var(--ink-2);text-decoration:none}
+  nav.toc a:hover{background:var(--surface-2);color:var(--ink)}
+  nav.toc a .n{color:var(--muted);font-variant-numeric:tabular-nums;min-width:1.1em}
+  nav.toc .grp{margin:16px 0 4px;padding-left:8px;font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+}
+
+/* ══ Hero ════════════════════════════════════════════════════════════════ */
+header.hero{border-bottom:1px solid var(--rule);background:
+   linear-gradient(180deg,var(--surface-3),transparent 70%)}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+h1{font-size:clamp(2.3rem,5.4vw,3.7rem);line-height:1.02;letter-spacing:-.022em;font-weight:600;
+  margin:0 0 18px;text-wrap:balance}
+.lede{font-size:clamp(1.06rem,1.9vw,1.28rem);line-height:1.55;color:var(--ink-2);max-width:60ch;margin:0 0 26px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 26px;font-family:"IBM Plex Mono",monospace;font-size:12px;
+  color:var(--muted);padding:16px 0 0;border-top:1px solid var(--rule)}
+.meta b{color:var(--ink-2);font-weight:500}
+
+/* ══ Tuiles ══════════════════════════════════════════════════════════════ */
+.tiles{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));margin:30px 0 0}
+.tile{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:16px 16px 14px;box-shadow:var(--shadow)}
+.tile .k{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.tile .v{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:2.05rem;font-weight:600;line-height:1;
+  letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--ink)}
+.tile .v small{font-size:.94rem;font-weight:500;color:var(--muted);letter-spacing:0}
+.tile .c{font-size:13px;line-height:1.4;color:var(--ink-2);margin:9px 0 0}
+
+/* ══ Sections ════════════════════════════════════════════════════════════ */
+section{padding:54px 0 6px;scroll-margin-top:14px}
+section > .prose > h2,h2.sec{font-size:clamp(1.5rem,2.7vw,2.05rem);line-height:1.12;letter-spacing:-.015em;
+  font-weight:600;margin:0 0 6px;text-wrap:balance;max-width:22ch}
+.secnum{display:block;font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.16em;
+  color:var(--accent);margin:0 0 10px}
+.standfirst{font-size:1.03rem;color:var(--ink-2);border-left:2px solid var(--rule-2);padding-left:16px;margin:18px 0 26px;max-width:64ch}
+h3{font-size:1.16rem;font-weight:600;letter-spacing:-.005em;margin:34px 0 10px}
+h4{font-size:.94rem;font-weight:600;margin:24px 0 8px;font-family:"IBM Plex Mono",monospace;
+  letter-spacing:.04em;color:var(--ink-2)}
+hr.div{border:0;border-top:1px solid var(--rule);margin:46px 0 0}
+
+/* ══ Tableaux ════════════════════════════════════════════════════════════ */
+.tw{overflow-x:auto;margin:20px 0 24px;border:1px solid var(--rule);border-radius:4px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;
+  font-family:"IBM Plex Sans Condensed",sans-serif}
+th{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;
+  text-align:left;color:var(--muted);font-weight:500;padding:11px 13px;
+  border-bottom:1px solid var(--rule-2);white-space:nowrap;background:var(--surface-3)}
+td{padding:9px 13px;border-bottom:1px solid var(--rule);vertical-align:top;color:var(--ink-2)}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;
+  font-size:12.5px;white-space:nowrap}
+td b,td strong{color:var(--ink);font-weight:600}
+tr.hi td{background:var(--accent-soft)}
+tr.hi td b{color:var(--ink)}
+caption{caption-side:bottom;text-align:left;padding:11px 13px;font-size:12.5px;color:var(--muted);
+  font-family:"IBM Plex Serif",serif;border-top:1px solid var(--rule)}
+td .u{color:var(--muted);font-size:11.5px}
+
+/* ══ Chips / verdicts ════════════════════════════════════════════════════ */
+.chip{display:inline-flex;align-items:center;gap:5px;font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:2px;
+  border:1px solid currentColor;white-space:nowrap;line-height:1.5}
+.chip.ok{color:var(--good)} .chip.wr{color:var(--warn)} .chip.no{color:var(--crit)}
+.chip.nt{color:var(--muted)}
+
+/* ══ Encadrés ════════════════════════════════════════════════════════════ */
+.box{border:1px solid var(--rule);border-left:3px solid var(--accent);background:var(--surface);
+  border-radius:0 4px 4px 0;padding:16px 18px;margin:24px 0;font-size:15px}
+.box .lab{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 8px}
+.box p:last-child{margin-bottom:0}
+.box.limite{border-left-color:var(--crit);background:var(--crit-soft)}
+.box.limite .lab{color:var(--crit)}
+.box.mesure{border-left-color:var(--good)}
+.box.mesure .lab{color:var(--good)}
+
+.eq{background:var(--surface-3);border:1px solid var(--rule);border-radius:4px;padding:14px 16px;
+  margin:20px 0;font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.75;
+  overflow-x:auto;white-space:pre;color:var(--ink)}
+pre{background:var(--surface-3);border:1px solid var(--rule);border-radius:4px;padding:14px 16px;
+  overflow-x:auto;font-size:12.5px;line-height:1.6;margin:20px 0}
+code{font-size:.88em;background:var(--surface-2);padding:.1em .35em;border-radius:2px;color:var(--ink)}
+pre code{background:none;padding:0}
+
+/* ══ Figures ═════════════════════════════════════════════════════════════ */
+figure{margin:28px 0;background:var(--surface);border:1px solid var(--rule);border-radius:4px;
+  padding:20px 20px 14px;box-shadow:var(--shadow)}
+figure .figtitle{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;font-size:1.02rem;
+  margin:0 0 3px;color:var(--ink)}
+figure .figsub{font-size:13px;color:var(--muted);margin:0 0 16px;font-family:"IBM Plex Serif",serif}
+figcaption{font-size:13px;color:var(--muted);line-height:1.5;margin:12px 0 0;padding-top:12px;
+  border-top:1px solid var(--rule)}
+figure svg{display:block;max-width:100%;height:auto}
+.svgscroll{overflow-x:auto}
+
+/* ══ Graphiques ══════════════════════════════════════════════════════════ */
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;margin:0 0 12px;font-family:"IBM Plex Sans Condensed",sans-serif;font-size:12.5px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:14px;height:3px;border-radius:2px;display:inline-block}
+.filters{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.filters button{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.05em;
+  padding:5px 11px;border:1px solid var(--rule-2);background:var(--surface);color:var(--ink-2);
+  border-radius:2px;cursor:pointer}
+.filters button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:500}
+.tip{position:fixed;pointer-events:none;opacity:0;transition:opacity .1s;z-index:60;
+  background:var(--surface);border:1px solid var(--rule-2);border-radius:3px;padding:8px 10px;
+  box-shadow:var(--shadow);font-family:"IBM Plex Mono",monospace;font-size:11.5px;line-height:1.55;color:var(--ink)}
+.tip b{font-weight:600}
+details.tv{margin:12px 0 0}
+details.tv summary{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);cursor:pointer;
+  letter-spacing:.05em}
+details.tv[open] summary{margin-bottom:6px}
+details.tv .tw{margin-top:8px}
+
+/* ══ Listes de faits ═════════════════════════════════════════════════════ */
+dl.facts{display:grid;grid-template-columns:auto 1fr;gap:0;margin:20px 0;border-top:1px solid var(--rule)}
+dl.facts dt{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);padding:9px 20px 9px 0;
+  border-bottom:1px solid var(--rule);white-space:nowrap}
+dl.facts dd{margin:0;padding:9px 0;border-bottom:1px solid var(--rule);font-size:14.5px;color:var(--ink-2)}
+
+footer{border-top:1px solid var(--rule);margin-top:60px;padding:30px 0 70px;font-size:13px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+<style>
+/* ══ Barre de site — n'existe que sur la page publique ════════════════════ */
+.sitebar{
+  border-bottom:1px solid var(--rule); background:var(--surface);
+  font-family:"IBM Plex Sans Condensed","Helvetica Neue",Arial,sans-serif;
+}
+.sitebar .in{
+  max-width:1240px; margin:0 auto; padding:9px 22px;
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+}
+.sitebar a.retour{
+  color:var(--ink-2); text-decoration:none; font-size:13px;
+  display:inline-flex; align-items:center; gap:7px; padding:4px 0;
+}
+.sitebar a.retour:hover{color:var(--accent)}
+.sitebar .sp{flex:1}
+.themes{display:flex; align-items:center; gap:8px}
+.themes .lab{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:10px;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
+}
+.themes .grp{display:flex; border:1px solid var(--rule-2); border-radius:3px; overflow:hidden}
+.themes button{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px;
+  padding:4px 10px; border:0; background:var(--surface); color:var(--ink-2);
+  cursor:pointer; border-left:1px solid var(--rule);
+}
+.themes button:first-child{border-left:0}
+.themes button[aria-pressed="true"]{background:var(--accent); color:var(--bg); font-weight:500}
+.nojs{
+  max-width:1240px; margin:0 auto; padding:10px 22px; font-size:13.5px;
+  color:var(--crit); border-bottom:1px solid var(--rule);
+  font-family:"IBM Plex Serif",Georgia,serif;
+}
+.pagefoot{
+  border-top:1px solid var(--rule); background:var(--surface-3);
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:12px; color:var(--muted);
+}
+.pagefoot .in{
+  max-width:1240px; margin:0 auto; padding:20px 22px;
+  display:flex; gap:10px 28px; flex-wrap:wrap; align-items:baseline;
+}
+.pagefoot a{color:var(--accent)}
+
+/* ══ Impression — un rapport d'encadreur finit imprimé ═══════════════════ */
+@media print{
+  .sitebar,.pagefoot,nav.toc,.filters,.tip,.nojs{display:none!important}
+  html,body{background:#fff!important}
+  body{font-size:10.5pt; color:#000}
+  .layout{display:block!important}
+  .prose{max-width:none}
+  .tw{overflow:visible!important; border-color:#bbb}
+  figure,.tw,.box,.eq,pre,dl.facts{break-inside:avoid; box-shadow:none}
+  section{break-before:auto}
+  h2,h3{break-after:avoid}
+  a{color:#000; text-decoration:none}
+  a[href^="http"]::after{content:" (" attr(href) ")"; font-size:8pt; color:#555}
+  .tile,figure,.tw{border-color:#bbb}
+  header.hero{background:none!important}
+}
+</style>
+</head>
+<body>
+<div class="sitebar">
+  <div class="in">
+    <a class="retour" href="../">&#8592;&nbsp; Démonstration : interaction vocale avec le KUKA</a>
+    <span class="sp"></span>
+    <div class="themes">
+      <span class="lab" id="lbl-theme">Thème</span>
+      <div class="grp" role="group" aria-labelledby="lbl-theme">
+        <button type="button" data-theme-set="auto"  aria-pressed="true">Système</button>
+        <button type="button" data-theme-set="light" aria-pressed="false">Clair</button>
+        <button type="button" data-theme-set="dark"  aria-pressed="false">Sombre</button>
+      </div>
+    </div>
+  </div>
+</div>
+<noscript><p class="nojs">Cette page trace ses courbes et ses tableaux de mesures avec
+JavaScript. Sans lui, le texte, les schémas et les tableaux rédigés restent lisibles,
+mais les sept graphiques et trois tableaux de données ne s'affichent pas.</p></noscript>
+<header class="hero">
+  <div class="wrap">
+    <div class="layout">
+      <div></div>
+      <div style="padding:44px 0 34px">
+        <p class="eyebrow">Objectif spécifique 1 · pré-entraînement auto-supervisé · dossier de validation</p>
+        <h1>models_best</h1>
+        <p class="lede">Un réseau étudiant de 37,7 M de paramètres apprend une représentation de
+        la parole <b>robuste au bruit sans jamais voir le signal propre</b>, par
+        <i>noise-to-noise</i> et distillation multi-professeurs. Ce document expose la méthode,
+        chaque paramètre, chaque mesure — et chaque limite.</p>
+        <div class="meta">
+          <span><b>Dépôt</b> · models_best/ · branche models_v1</span>
+          <span><b>Modèle livré</b> · training_run_re4_20260815_103113</span>
+          <span><b>Chaîne cible</b> · commande vocale KUKA KR50</span>
+          <span><b>Mesures relues</b> · 2026-08-20</span>
+        </div>
+        <div class="tiles">
+          <div class="tile">
+            <p class="k">PER — bande cible −5..+15 dB</p>
+            <div class="v">0,590</div>
+            <p class="c">contre <b>0,756</b> pour son initialisation exacte.
+            <b>15 cellules sur 15</b> gagnées.</p>
+          </div>
+          <div class="tile">
+            <p class="k">Sensibilité au bruit</p>
+            <div class="v">÷ 1,78</div>
+            <p class="c">PER perdu à cause du bruit : <b>0,245</b> contre 0,437 pour WavLM couche 4.</p>
+          </div>
+          <div class="tile">
+            <p class="k">Tâche réelle · 22 commandes</p>
+            <div class="v">80,8<small> %</small></div>
+            <p class="c">accepté-et-juste sur propre..−5 dB, contre 64,6 %.
+            <b>0 %</b> de fausse acceptation.</p>
+          </div>
+          <div class="tile">
+            <p class="k">Coût d'inférence</p>
+            <div class="v">RTF 0,012</div>
+            <p class="c">CPU seul, 37,7 M paramètres, 151 Mo. ~80× le temps réel.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="layout">
+
+<nav class="toc" aria-label="Sommaire">
+  <ol>
+    <li class="grp">Le cadre</li>
+    <li><a href="#s1"><span class="n">1</span> Projet et objectif</a></li>
+    <li><a href="#s2"><span class="n">2</span> Le principe</a></li>
+    <li class="grp">Le système</li>
+    <li><a href="#s3"><span class="n">3</span> Architecture</a></li>
+    <li><a href="#s4"><span class="n">4</span> Têtes et agrégations</a></li>
+    <li><a href="#s5"><span class="n">5</span> Les pertes</a></li>
+    <li><a href="#s6"><span class="n">6</span> Données</a></li>
+    <li><a href="#s7"><span class="n">7</span> Les trois phases</a></li>
+    <li><a href="#s8"><span class="n">8</span> Paramètres</a></li>
+    <li><a href="#s9"><span class="n">9</span> Écarts à la Fig. 1</a></li>
+    <li class="grp">Les mesures</li>
+    <li><a href="#s10"><span class="n">10</span> L'instrument</a></li>
+    <li><a href="#s11"><span class="n">11</span> Résultats du RE</a></li>
+    <li><a href="#s12"><span class="n">12</span> Effets internes</a></li>
+    <li><a href="#s13"><span class="n">13</span> Le système RAP</a></li>
+    <li><a href="#s14"><span class="n">14</span> Déploiement</a></li>
+    <li class="grp">Le jugement</li>
+    <li><a href="#s15"><span class="n">15</span> Limites</a></li>
+    <li><a href="#s16"><span class="n">16</span> Conclusion</a></li>
+    <li><a href="#s17"><span class="n">17</span> Reproduire</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<!-- ══════════════════ 1 ══════════════════ -->
+<section id="s1">
+<div class="prose">
+  <span class="secnum">§ 1</span>
+  <h2 class="sec">Le projet, l'objectif, et ce qui est réellement livré</h2>
+  <p class="standfirst">La chaîne de commande vocale du robot KUKA KR50 doit fonctionner dans
+  un atelier bruyant. <code>models_best</code> est la brique amont de cette chaîne :
+  l'<b>Objectif spécifique 1</b>, un pré-entraînement auto-supervisé qui produit une
+  <i>représentation</i> de la parole, et non un signal débruité.</p>
+
+  <h3>1.1 · La distinction qui gouverne tout le dossier</h3>
+  <p>Ce n'est <b>pas</b> un système de rehaussement audio dont le livrable serait un signal
+  propre. C'est un <b>apprentissage de représentations robustes au service de la
+  reconnaissance</b>. Cette distinction n'est pas rhétorique : elle a été imposée par la mesure.
+  Le diagnostic D1 du projet a établi, sur 180 paires appariées et deux ASR indépendants,
+  qu'<b>aucun débruiteur n'améliore aucun ASR, dans aucune bande de SNR</b> — et que ce n'est
+  pas un défaut de notre modèle, puisque DeepFilterNet3, état de l'art public, dégrade lui aussi
+  (+0,089 de WER, p = 0,003). Le décodeur de forme d'onde a donc été désactivé
+  (<code>decoder_enabled = False</code>) et le livrable est la représentation interne.</p>
+
+  <div class="box">
+    <p class="lab">Le juge, fixé avant les mesures</p>
+    <p>Le critère de sélection est une <b>métrique de tâche ventilée par SNR</b>, jamais une
+    métrique signal. PESQ, DNSMOS, SI-SNR et STOI sont des garde-fous de non-régression.
+    Cette contrainte est <b>codée en dur</b> : <code>config/global_config.py</code> lève une
+    <code>ValueError</code> si <code>selection_metric</code> prend une autre valeur. Motif
+    historique : dans une version antérieure du projet, une sélection sur DNSMOS avait orienté
+    l'essentiel du travail vers une métrique <i>anti-corrélée</i> au WER (ρ = +0,90).</p>
+  </div>
+
+  <h3>1.2 · Les quatre artefacts livrés</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>Artefact</th><th class="num">Taille</th><th>Rôle</th></tr></thead>
+    <tbody>
+      <tr class="hi"><td><code>results/training_run_re4_20260815_103113/re_final.pt</code></td><td class="num">1,6 Go</td><td><b>Le modèle.</b> Contient PP, PA et RE ; seul le RE est livré</td></tr>
+      <tr><td><code>rap/tete_ctc.pt</code></td><td class="num">132 Ko</td><td>Tête CTC linéaire déployée, 43 classes phonémiques</td></tr>
+      <tr><td><code>rap/references.json</code></td><td class="num">12 Ko</td><td>Gabarits phonémiques des 22 commandes robot</td></tr>
+      <tr><td><code>…p1p2_taps6…/ckpt_p2_ep37.pt</code></td><td class="num">2,3 Go</td><td>Ancêtre Phases 1+2 — nécessaire pour <i>rejouer</i> la Phase 3, pas pour utiliser le modèle</td></tr>
+    </tbody>
+    <caption>Pour déployer, <b>151 Mo suffisent</b> : l'encodeur du RE (37,67 M paramètres, fp32)
+    + la tête CTC + les références. Les 1,45 Go restants de <code>re_final.pt</code> sont le PP et
+    les PA, utiles seulement pour ré-entraîner.</caption>
+  </table>
+  </div>
+
+  <h3>1.3 · La lignée réelle du modèle livré</h3>
+  <p>Le modèle n'a pas été produit par un seul run, mais par deux. C'est un point de
+  reproductibilité que le dossier signale lui-même :</p>
+  <div class="eq">run p1p2_taps6 (14 août)  ──►  ckpt_p2_ep37.pt  ──►  run re4 (15 août)  ──►  re_final.pt
+  Phase 1 : 33 ép × 600 = 19 800 pas          Phase 3 : 15 ép × 600 = 9 000 pas
+  Phase 2 : 37 ép × 600 = 22 200 pas          re_layers : 2 → 4</div>
+  <div class="box limite">
+    <p class="lab">Limite de traçabilité — déclarée, non corrigée</p>
+    <p>Le fichier <code>results/training_run_re4_…/config.json</code> déclare
+    <code>phase1_epochs = 10</code> et <code>phase2_epochs = 60</code>. <b>C'est faux pour ce
+    modèle</b> : ces phases n'ont pas été exécutées dans ce run, elles ont été reprises du run
+    <code>taps6</code> où elles valaient 33 et 37. Reproduire le modèle depuis son propre fichier
+    de configuration produirait un <i>autre</i> modèle. Le tableau du § 8 fait foi, pas les
+    <code>config.json</code>.</p>
+  </div>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 2 ══════════════════ -->
+<section id="s2">
+<div class="prose">
+  <span class="secnum">§ 2</span>
+  <h2 class="sec">Le principe : noise-to-noise et distillation</h2>
+  <p class="standfirst">Deux idées se combinent. Le <i>noise-to-noise</i> permet d'apprendre sans
+  jamais voir le signal propre ; la distillation transfère ce qu'un gros professeur a appris
+  vers un étudiant assez petit pour tourner sur le robot.</p>
+
+  <h3>2.1 · Le théorème N2N</h3>
+  <p>Si l'on dispose de deux observations bruitées <code>x₁</code> et <code>x₂</code> du
+  <i>même</i> signal sous-jacent <code>y</code>, avec un bruit de moyenne nulle, alors :</p>
+  <div class="eq">argmin<sub>f</sub> E‖f(x₁) − x₂‖²  =  argmin<sub>f</sub> E‖f(x₁) − y‖²        avec  E[n₂] = 0</div>
+  <p>Apprendre à prédire une <b>autre observation bruitée</b> revient à apprendre à prédire le
+  signal propre — <b>sans jamais le voir</b>. C'est ce qui rend le pré-entraînement possible sur
+  du bruit d'atelier réel, pour lequel aucune version propre n'existera jamais.</p>
+
+  <h3>2.2 · Ce que l'agrégation ajoute — et l'honnêteté inscrite dans le code</h3>
+  <p>Chaque professeur assistant voit <b>sa propre réalisation de bruit</b>. Leur moyenne</p>
+  <div class="eq">h̄_A  =  (1/M) · Σ<sub>m</sub> g<sub>m</sub>(y_rev + n<sub>m</sub>)</div>
+  <p>est un <b>estimateur Monte-Carlo</b> de <code>E_n[g(y_rev + n)]</code>, de variance en
+  <code>1/M</code>. C'est ce qui rend la moyenne statistiquement fondée au lieu de décorative.</p>
+  <div class="box limite">
+    <p class="lab">Réserve théorique assumée — inégalité de Jensen</p>
+    <p><code>E_n[g(y+n)] ≠ g(y)</code> pour un encodeur <code>g</code> non affine. MULTINOISE
+    ne restaure donc <b>pas</b> la non-biaisitude N2N dans l'espace des <i>features</i> — aucune
+    correction de données ne le peut. La cible est la représentation <b>marginalisée sur le
+    bruit</b>, pas la représentation propre. C'est une cible d'<b>invariance</b>, ce qui est
+    exactement l'objectif visé — mais ce n'est pas la « convergence vers le propre » qu'annonce
+    le document source de la méthode. Cette réserve figure dans <code>models/aggregation.py</code>
+    et dans <code>docs/THEORIE.md</code>.</p>
+  </div>
+
+  <h3>2.3 · Le rôle de la distillation</h3>
+  <p>Le professeur principal fait 94,4 M de paramètres, les trois assistants 286,7 M : rien de
+  cela n'est embarquable. L'étudiant à 4 couches (37,7 M déployables) prédit
+  <i>plusieurs couches profondes</i> du professeur par des têtes séparées — le principe exact de
+  DistilHuBERT — et absorbe ainsi une connaissance qu'il n'a pas la profondeur d'héberger.</p>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 3 ══════════════════ -->
+<section id="s3">
+<div class="prose">
+  <span class="secnum">§ 3</span>
+  <h2 class="sec">L'architecture : PP, PA, RE</h2>
+  <p class="standfirst">Quatre encodeurs, 423,5 M de paramètres en mémoire à l'entraînement,
+  un seul livré. Chaque rôle est défini par ce qu'il voit et par ce qu'il ne voit pas.</p>
+</div>
+
+<figure>
+  <p class="figtitle">Le pipeline complet, un pas d'entraînement</p>
+  <p class="figsub">Ce que chaque encodeur reçoit en entrée, où chaque perte s'applique, et quel
+  tenseur est réellement livré.</p>
+  <div class="svgscroll">
+  <svg viewBox="0 0 1020 640" role="img" aria-label="Schéma du pipeline : l'énoncé propre y est réverbéré puis bruité en x1 pour le professeur principal et le réseau étudiant, et en trois x2 indépendants pour les trois professeurs assistants ; les taps des PA sont moyennés par l'Agrégation I et confrontés au PP par la perte PPA ; les couches du PP alimentent l'étudiant par la perte PE, l'Agrégation II par la perte PAE, et les pseudo-étiquettes par une divergence KL.">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+      </marker>
+      <marker id="arA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#12507F"/>
+      </marker>
+    </defs>
+    <g font-family="IBM Plex Mono, monospace" font-size="11.5" fill="currentColor">
+
+      <!-- colonne données -->
+      <text x="20" y="26" font-size="10.5" letter-spacing="1.4" fill="#68757F">DONNÉES</text>
+      <rect x="20" y="40" width="150" height="34" rx="3" fill="none" stroke="currentColor" stroke-dasharray="4 3" opacity=".65"/>
+      <text x="95" y="61" text-anchor="middle" font-size="11">y  ·  jamais vu</text>
+      <line x1="95" y1="74" x2="95" y2="104" stroke="currentColor" marker-end="url(#ar)"/>
+      <text x="102" y="93" font-size="10" fill="#68757F">RIR</text>
+      <rect x="20" y="104" width="150" height="34" rx="3" fill="none" stroke="currentColor"/>
+      <text x="95" y="125" text-anchor="middle">y_rev = y ∗ h</text>
+
+      <path d="M95 138 L95 168 L95 178" stroke="currentColor" fill="none"/>
+      <path d="M95 178 L95 200" stroke="currentColor" fill="none" marker-end="url(#ar)"/>
+      <rect x="20" y="200" width="150" height="38" rx="3" fill="none" stroke="#12507F" stroke-width="1.5"/>
+      <text x="95" y="216" text-anchor="middle" fill="#12507F">x1 = y_rev + n0</text>
+      <text x="95" y="230" text-anchor="middle" font-size="9.5" fill="#68757F">SNR ∈ [−10, +15] dB</text>
+
+      <path d="M95 178 L14 178 L14 300 L20 300" stroke="currentColor" fill="none" marker-end="url(#ar)"/>
+      <rect x="20" y="284" width="150" height="30" rx="3" fill="none" stroke="currentColor"/>
+      <text x="95" y="303" text-anchor="middle">x2⁽¹⁾ = y_rev + n₁</text>
+      <rect x="20" y="322" width="150" height="30" rx="3" fill="none" stroke="currentColor"/>
+      <text x="95" y="341" text-anchor="middle">x2⁽²⁾ = y_rev + n₂</text>
+      <rect x="20" y="360" width="150" height="30" rx="3" fill="none" stroke="currentColor"/>
+      <text x="95" y="379" text-anchor="middle">x2⁽³⁾ = y_rev + n₃</text>
+      <text x="20" y="424" text-anchor="start" font-size="9.5" fill="#68757F">bruits de familles disjointes de celle de x1</text>
+
+      <!-- encodeurs -->
+      <text x="215" y="26" font-size="10.5" letter-spacing="1.4" fill="#68757F">ENCODEURS</text>
+      <rect x="215" y="180" width="175" height="78" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <text x="302" y="203" text-anchor="middle" font-size="13" font-family="IBM Plex Sans Condensed, sans-serif" font-weight="600">PP · professeur</text>
+      <text x="302" y="221" text-anchor="middle" font-size="10.5">WavLM Base+ · 12 c. · 94,4 M</text>
+      <text x="302" y="238" text-anchor="middle" font-size="10.5" fill="#68757F">MASQUÉ · SpecAugment 6,5 %</text>
+      <text x="302" y="252" text-anchor="middle" font-size="10.5" fill="#12507F">taps T6 · T8 · T12</text>
+      <line x1="170" y1="219" x2="215" y2="219" stroke="#12507F" marker-end="url(#arA)"/>
+
+      <rect x="215" y="284" width="175" height="30" rx="3" fill="none" stroke="currentColor"/>
+      <text x="302" y="303" text-anchor="middle">PA₁ · 12 c. · 95,6 M</text>
+      <rect x="215" y="322" width="175" height="30" rx="3" fill="none" stroke="currentColor"/>
+      <text x="302" y="341" text-anchor="middle">PA₂ · 12 c. · 95,6 M</text>
+      <rect x="215" y="360" width="175" height="30" rx="3" fill="none" stroke="currentColor"/>
+      <text x="302" y="379" text-anchor="middle">PA₃ · 12 c. · 95,6 M</text>
+      <line x1="170" y1="299" x2="215" y2="299" stroke="currentColor" marker-end="url(#ar)"/>
+      <line x1="170" y1="337" x2="215" y2="337" stroke="currentColor" marker-end="url(#ar)"/>
+      <line x1="170" y1="375" x2="215" y2="375" stroke="currentColor" marker-end="url(#ar)"/>
+      <text x="302" y="404" text-anchor="middle" font-size="9.5" fill="#68757F">NON masqués · appariement strict PA_m ↔ n_m</text>
+
+      <!-- agrégation -->
+      <text x="425" y="26" font-size="10.5" letter-spacing="1.4" fill="#68757F">AGRÉGATION</text>
+      <line x1="390" y1="299" x2="425" y2="330" stroke="currentColor"/>
+      <line x1="390" y1="337" x2="425" y2="337" stroke="currentColor"/>
+      <line x1="390" y1="375" x2="425" y2="344" stroke="currentColor"/>
+      <rect x="425" y="300" width="122" height="40" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <text x="486" y="317" text-anchor="middle" font-size="11.5">Agrégation I</text>
+      <text x="486" y="332" text-anchor="middle" font-size="10" fill="#68757F">moyenne des taps</text>
+      <rect x="425" y="352" width="122" height="40" rx="3" fill="none" stroke="currentColor"/>
+      <text x="486" y="369" text-anchor="middle" font-size="11.5">Agrégation II</text>
+      <text x="486" y="384" text-anchor="middle" font-size="10" fill="#68757F">moyenne last_hidden</text>
+      <line x1="425" y1="372" x2="400" y2="372" stroke="currentColor" opacity="0"/>
+
+      <!-- L_PPA -->
+      <path d="M486 300 L486 272" stroke="#12507F" fill="none" marker-end="url(#arA)"/>
+      <text x="497" y="288" font-size="11" fill="#12507F">ℒ_PPA</text>
+      <path d="M390 250 L486 250 L486 272" stroke="#12507F" fill="none" stroke-dasharray="5 3"/>
+      <text x="404" y="243" font-size="9.5" fill="#12507F">cible détachée (ASYM)</text>
+
+      <!-- étudiant -->
+      <text x="700" y="26" font-size="10.5" letter-spacing="1.4" fill="#68757F">ÉTUDIANT — LE LIVRABLE</text>
+      <rect x="700" y="150" width="300" height="250" rx="4" fill="none" stroke="#12507F" stroke-width="1.8"/>
+      <text x="850" y="176" text-anchor="middle" font-size="14" font-family="IBM Plex Sans Condensed, sans-serif" font-weight="600" fill="#12507F">RE · réseau étudiant</text>
+      <text x="850" y="194" text-anchor="middle" font-size="10.5">CNN + 4 couches Transformer · 37,7 M</text>
+      <text x="850" y="209" text-anchor="middle" font-size="9.5" fill="#68757F">init. par copie des 4 premières couches du PP</text>
+      <line x1="716" y1="220" x2="984" y2="220" stroke="currentColor" opacity=".3"/>
+      <rect x="716" y="232" width="128" height="26" rx="2" fill="none" stroke="currentColor"/>
+      <text x="780" y="249" text-anchor="middle" font-size="10.5">TPE₁ → T6</text>
+      <rect x="856" y="232" width="128" height="26" rx="2" fill="none" stroke="currentColor"/>
+      <text x="920" y="249" text-anchor="middle" font-size="10.5">TPE₂ → T8</text>
+      <rect x="716" y="266" width="128" height="26" rx="2" fill="none" stroke="currentColor"/>
+      <text x="780" y="283" text-anchor="middle" font-size="10.5">TPE₃ → T12</text>
+      <rect x="856" y="266" width="128" height="26" rx="2" fill="none" stroke="currentColor"/>
+      <text x="920" y="283" text-anchor="middle" font-size="10.5">TP_EA → AggII</text>
+      <rect x="716" y="300" width="268" height="26" rx="2" fill="none" stroke="currentColor"/>
+      <text x="850" y="317" text-anchor="middle" font-size="10.5">tête pseudo-étiquettes · 100 classes</text>
+      <rect x="716" y="340" width="268" height="44" rx="2" fill="#12507F" fill-opacity=".08" stroke="#12507F"/>
+      <text x="850" y="359" text-anchor="middle" font-size="11.5" fill="#12507F">last_hidden  (T, 768)</text>
+      <text x="850" y="375" text-anchor="middle" font-size="10" fill="#12507F">← LA SORTIE LIVRÉE</text>
+
+      <!-- x1 vers RE -->
+      <path d="M95 238 L95 470 L850 470 L850 400" stroke="#12507F" fill="none" marker-end="url(#arA)"/>
+      <text x="440" y="464" font-size="10.5" fill="#12507F">x1 — l'étudiant voit la même entrée que le professeur</text>
+
+      <!-- L_PE -->
+      <path d="M390 219 L560 219 L560 245 L716 245" stroke="currentColor" fill="none" marker-end="url(#ar)"/>
+      <text x="566" y="200" font-size="11">ℒ_PE · α = 1,0</text>
+      <text x="566" y="215" font-size="9.5" fill="#68757F">3 taps → 3 têtes</text>
+      <!-- L_PAE -->
+      <path d="M547 372 L640 372 L640 279 L856 279" stroke="currentColor" fill="none" marker-end="url(#ar)"/>
+      <text x="560" y="394" font-size="11">ℒ_PAE · γ = 2,0</text>
+      <text x="560" y="409" font-size="9.5" fill="#68757F">canal latéral PA → RE</text>
+      <!-- L_pseudo -->
+      <path d="M302 258 L302 268 L200 268 L200 566 L680 566 L680 313 L710 313" stroke="currentColor" fill="none" stroke-dasharray="5 3" marker-end="url(#ar)"/>
+      <text x="216" y="560" font-size="10.5">ℒ_pseudo · λ = 0,5 — softmax(cos(feature_PP, centroïde)/τ) → KL</text>
+
+      <!-- garde-fou -->
+      <rect x="216" y="588" width="768" height="32" rx="3" fill="none" stroke="currentColor" stroke-dasharray="3 3" opacity=".8"/>
+      <text x="600" y="608" text-anchor="middle" font-size="10.5">ℒ_richesse × 20 — active dans les trois phases : pénalise toute contraction de plus de 30 % sous la référence saine</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption><b>Ce que la figure montre</b> — le PP et le RE voient la <i>même</i> entrée
+  <code>x1</code> ; les trois PA voient trois bruits <i>indépendants</i> sur le <i>même</i>
+  <code>y_rev</code>. C'est cette dissymétrie qui porte l'invariance : la perte ℒ_PPA compare une
+  vue bruitée à la moyenne d'autres vues bruitées, jamais à un signal propre.</figcaption>
+</figure>
+
+<div class="prose">
+  <h3>3.1 · Les quatre encodeurs, en chiffres</h3>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Rôle</th><th>Modèle</th><th class="num">Couches</th><th class="num">Paramètres</th><th>Entrée</th><th>Masquage</th></tr></thead>
+  <tbody>
+    <tr><td><b>PP</b> — professeur principal</td><td>WavLM Base+</td><td class="num">12</td><td class="num">94 381 936</td><td><code>x1</code></td><td><b>oui</b> — SpecAugment</td></tr>
+    <tr><td><b>PA × 3</b> — professeurs assistants</td><td>WavLM Base+</td><td class="num">12</td><td class="num">286,69 M<br><span class="u">95,56 × 3</span></td><td><code>x2⁽ᵐ⁾</code> — un bruit chacun</td><td>non</td></tr>
+    <tr class="hi"><td><b>RE</b> — réseau étudiant <i>· le livrable</i></td><td>copie des 4 premières couches du PP</td><td class="num">4</td><td class="num">42,48 M<br><span class="u">dont 37,67 M déployables</span></td><td><code>x1</code></td><td>non</td></tr>
+    <tr><td colspan="3"><b>Total en mémoire à l'entraînement</b></td><td class="num"><b>423,54 M</b></td><td colspan="2"><span class="u">d'où <code>batch_size = 4</code> — 8 provoque un OOM sur RTX 4090 24 Go</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="prose">
+  <h3>3.2 · Pourquoi WavLM Base+ et non HuBERT comme professeur</h3>
+  <p>Le pipeline antérieur utilisait HuBERT. Le changement est conceptuel, pas cosmétique :
+  HuBERT est pré-entraîné sur de la parole <b>propre</b> (LibriSpeech) ; un professeur qui n'a
+  jamais rencontré de bruit ne peut pas transmettre de notion de robustesse — ses représentations
+  d'un <code>x1</code> bruité sont hors-distribution <i>pour lui-même</i>. WavLM Base+ est
+  pré-entraîné avec <b>débruitage simulé et chevauchement de locuteurs</b> : il « connaît » déjà
+  le bruit, ce qui est exactement la propriété dont ℒ_PPA a besoin.</p>
+
+  <h3>3.3 · D'où vient la diversité des professeurs assistants</h3>
+  <p>Dans le pipeline antérieur, les M professeurs recevaient <b>le même</b> <code>x2</code> ;
+  leur seule source de diversité était l'initialisation. Résultat mesuré à l'époque : ℒ_PAE
+  s'effondrait à 0,013, et la performance était insensible à M ∈ {2,3,4,5}. Sous <b>MULTINOISE</b>,
+  la diversité vient de <i>la donnée</i>. Le contrôle direct est mesuré par
+  <code>tests/test_end2end.py</code> :</p>
+  <div class="box mesure">
+    <p class="lab">Contre-épreuve — dispersion inter-PA</p>
+    <p>Sous <code>x2</code> unique : dispersion inter-PA = <b>exactement 0,00</b> — l'« ensemble »
+    de M professeurs calculait M fois la même fonction.<br>
+    Sous MULTINOISE : dispersion inter-PA = <b>0,35</b>. Le moniteur d'entraînement traite toute
+    valeur nulle comme une panne fondatrice et arrête le run.</p>
+  </div>
+
+  <h3>3.4 · L'initialisation du RE — la décision la plus structurante</h3>
+  <p>Deux prescriptions du cahier des charges devenaient incompatibles : « RE = DistilHuBERT
+  inchangé » (poids publics, distillés depuis HuBERT) et « les couches du RE sont initialisées
+  par copie de celles du PP ». Elles étaient compatibles tant que PP = HuBERT ; elles ne le sont
+  plus depuis que PP = WavLM Base+.</p>
+  <p>Choix retenu : <b><code>init_from_pp</code></b> — copie du CNN, de la projection et des
+  <code>n</code> premières couches du PP. Trois raisons : (i) l'extracteur convolutif doit être
+  celui du professeur, sinon les cibles de distillation sont inatteignables par construction ;
+  (ii) l'étudiant démarre dans le bon bassin ; (iii) c'est la prescription littérale du schéma.
+  <code>init_from_distilhubert()</code> reste disponible pour l'ablation.</p>
+  <p><b>Conséquence directe et centrale : cette copie fixe mécaniquement le plafond du RE.</b>
+  Un RE à 4 couches ne peut pas, en principe, faire mieux que la couche 4 du WavLM public
+  (PER 0,3130). Il en atteint <b>97,2 %</b>.</p>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 4 ══════════════════ -->
+<section id="s4">
+<div class="prose">
+  <span class="secnum">§ 4</span>
+  <h2 class="sec">Têtes de prédiction et agrégations</h2>
+  <p class="standfirst">Quatre têtes sur l'étudiant, deux agrégations sur les professeurs. Chacune
+  a une justification mesurée — et l'une d'elles a été <i>désactivée</i> par la mesure.</p>
+
+  <h3>4.1 · Les têtes de prédiction</h3>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Tête</th><th>Où</th><th>Architecture</th><th>Cible</th><th>Statut</th></tr></thead>
+  <tbody>
+    <tr><td><code>TPE₁·₂·₃</code></td><td>RE</td><td>Linéaire 768→768 · GELU · Linéaire 768→768</td><td>taps T6, T8, T12 du PP</td><td><span class="chip ok">active</span></td></tr>
+    <tr><td><code>TP_EA</code></td><td>RE</td><td>idem</td><td>Agrégation II des PA</td><td><span class="chip ok">active</span></td></tr>
+    <tr><td><code>pseudo_head</code></td><td>RE</td><td>Linéaire 768→100</td><td>softmax sur 100 centroïdes k-means du PP</td><td><span class="chip ok">active</span></td></tr>
+    <tr><td><code>ctc_head</code></td><td>RE</td><td>Linéaire 768→43</td><td>—</td><td><span class="chip nt">sonde seule, hors perte</span></td></tr>
+    <tr><td><code>TPE_A</code></td><td>chaque PA</td><td>idem</td><td>Agrégation II</td><td><span class="chip no">contournée</span></td></tr>
+    <tr><td><code>decoder</code></td><td>RE</td><td>reconstruction de forme d'onde</td><td>audio</td><td><span class="chip no">désactivé (D-002)</span></td></tr>
+  </tbody>
+</table>
+</div>
+<div class="prose">
+  <div class="box mesure">
+    <p class="lab">Pourquoi TPE_A est contournée — un bug silencieux, mesuré</p>
+    <p>La tête <code>tpe_a</code> des PA <b>ne reçoit de gradient dans aucune phase</b> : ℒ_PPA
+    n'utilise que les taps, ℒ_PAE détache sa cible, et l'optimiseur de la Phase 3 ne contient que
+    le RE. Elle restait donc à son <b>initialisation aléatoire</b> et détruisait l'information au
+    lieu de la transmettre :</p>
+    <p style="margin-top:10px"><code>moyenne des last_hidden → WER sonde 0,067</code><br>
+       <code>moyenne des tpe_a(…)  → WER sonde 0,217</code> — <b>trois fois pire</b>.</p>
+    <p>Le document source introduit TPE_A pour « uniformiser le nombre d'unités concernées ». Or
+    tous les PA et le RE partagent la même dimension 768 : il n'y a rien à uniformiser.
+    <code>pae_use_tpe_a = False</code> par défaut ; <code>True</code> reste disponible pour la
+    conformité à la figure.</p>
+  </div>
+
+  <h3>4.2 · Les deux agrégations</h3>
+  <div class="eq">Agrégation I  :  h̄_A^i = (1/M) Σ_m h_m^i        taps des PA  →  confrontés au PP  (ℒ_PPA)
+Agrégation II :  ā     = (1/M) Σ_m last_hidden_m   sorties des PA  →  confrontées au RE (ℒ_PAE)</div>
+  <p>L'Agrégation II <b>ne passe pas par le PP</b> : c'est un canal direct PA → RE. La faire
+  transiter par le PP la rendrait redondante avec ℒ_PE. Deux diagnostics accompagnent ces
+  agrégations, <b>jamais optimisés</b> — les mesurer et les optimiser sont deux choses
+  différentes :</p>
+  <ul>
+    <li><b>dispersion inter-PA</b> — répond à l'angle mort « les 3 PA sont-ils réellement
+    différents ? ». Sous MULTINOISE : 0,26 à 0,46 selon le tap. Zéro = panne.</li>
+    <li><b>richesse</b> — écart-type moyen par dimension. Mesure l'antagonisme
+    <i>invariance ⊥ richesse</i> : contracter une représentation la rend trivialement plus
+    invariante. Cette grandeur entre <b>dans la perte</b>, sur les trois taps.</li>
+  </ul>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 5 ══════════════════ -->
+<section id="s5">
+<div class="prose">
+  <span class="secnum">§ 5</span>
+  <h2 class="sec">Les fonctions de perte</h2>
+  <p class="standfirst">Un patron commun — distance L1 plus similarité cosinus log-sigmoïde — et
+  cinq termes dont chacun répond à une pathologie mesurée du projet.</p>
+
+  <div class="eq">ℒ = Σ_i ‖h_a^i − h_b^i‖₁  −  log σ[ cos(h_a^i, h_b^i) ]
+
+ℒ_total = α·ℒ_PE + β·ℒ_PPA + γ·ℒ_PAE + λ·ℒ_pseudo + var_weight·ℒ_richesse</div>
+</div>
+
+<div class="tw">
+<table>
+  <thead><tr><th>Perte</th><th class="num">Poids</th><th>Sens du transfert</th><th>Phases</th><th>Contribution mesurée</th></tr></thead>
+  <tbody>
+    <tr><td><b>ℒ_PPA</b></td><td class="num">β = 1,0</td><td>PP ↔ Agrégation I · cible détachée</td><td>1 et 2</td><td>seule perte des Phases 1–2</td></tr>
+    <tr><td><b>ℒ_PE</b></td><td class="num">α = 1,0</td><td>PP → RE, 3 taps</td><td>3</td><td><b>60,1 %</b> de la perte de Phase 3 ; la couper coûte <b>+0,0111</b> de PER</td></tr>
+    <tr><td><b>ℒ_PAE</b></td><td class="num">γ = 2,0</td><td>Agrégation II → RE</td><td>3</td><td>la couper coûte <b>+0,0002</b> — <span class="chip no">canal inutile</span></td></tr>
+    <tr><td><b>ℒ_pseudo</b></td><td class="num">λ = 0,5</td><td>KL sur 100 centroïdes k-means du PP</td><td>3</td><td>le pont vers la reconnaissance (D-028)</td></tr>
+    <tr><td><b>ℒ_richesse</b></td><td class="num">× 20,0</td><td>garde-fou unilatéral, tous les taps</td><td>1 à 3</td><td>empêche la contraction triviale</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="prose">
+  <h3>5.1 · ASYM-PPA : le stop-gradient, et pourquoi il est <i>protecteur</i></h3>
+  <p>La figure de référence dessine des <b>doubles flèches</b> — des gradients dans les deux sens.
+  Mesuré dans une version antérieure : le régime bidirectionnel provoque un <b>effondrement
+  mutuel</b>, les deux réseaux se poursuivant et contractant leurs représentations ensemble.
+  Diagnostic validé par le signe de <code>(κ_propre − κ)</code> : <b>−0,082</b> sans discipline de
+  gradient, <b>+0,05 à +0,07</b> avec. On applique donc un stop-gradient côté cible.</p>
+  <p>Le paramètre <code>grad_to</code> dit explicitement <b>qui apprend de qui, et cela dépend de
+  la phase</b> : <code>"pa"</code> en Phase 1 (les PA s'ancrent sur le PP figé — sans cette
+  inversion, la Phase 1 n'a <i>aucun</i> chemin de gradient), <code>"pp"</code> en Phase 2.</p>
+  <div class="box mesure">
+    <p class="lab">Vérification par ablation — M8</p>
+    <p>Dégeler les PA en Phase 2 (<code>pa_train_phase2 = True</code>, le régime bidirectionnel)
+    donne un PER de <b>0,9782</b>, soit <b>pire que le hasard</b> (0,9598). Le gel n'est donc pas
+    une négligence : c'est ASYM-PPA qui empêche l'effondrement mutuel.</p>
+  </div>
+
+  <h3>5.2 · La normalisation de ℒ_PPA — cause racine d'un effondrement</h3>
+  <p>Le terme L1 porte sur des représentations <b>centrées-réduites</b>
+  (<code>ppa_normalize = True</code>). Raison mesurée : la cible de ℒ_PPA est un <i>agrégat</i>,
+  donc de variance structurellement plus faible que les représentations individuelles (ratio
+  mesuré 0,82–0,87), et le PP est en outre 1,4 à 2,0× plus riche que ses PA. Un L1 brut imposait
+  donc au PP de <b>rétrécir de moitié</b> pour s'aligner sur l'échelle de sa cible — ce qui
+  <i>est</i> l'effondrement que le garde-fou tentait ensuite de combattre. C'est ce qui avait
+  arrêté un run entier au pas 6 164.</p>
+  <p>Séparation propre des rôles, désormais : <b>ℒ_PPA oriente, la richesse borne.</b></p>
+
+  <h3>5.3 · Le garde-fou de richesse — pourquoi un seuil <i>relatif</i></h3>
+  <p>Un WavLM Base+ pré-entraîné <b>sain</b> a une richesse de 0,14 à 0,21 (écart-type par
+  dimension) : T4 = 0,178, T8 = 0,209, T12 = 0,142. Un seuil absolu de 0,5 — première version du
+  fichier — aurait donc pénalisé en permanence un modèle parfaitement sain, injectant un gradient
+  parasite constant. La pénalité est donc <b>relative à une référence calibrée au démarrage</b>,
+  <b>unilatérale</b> (on ne pénalise jamais une représentation trop riche) et
+  <b>quadratique</b> :</p>
+  <div class="eq">pénalité(h) = ReLU( 0,7·réf − richesse(h) )² / (0,7·réf)²        var_weight = 20,0</div>
+  <p>Deux seuils distincts : la <b>pénalité</b> agit dès 0,70 de la référence, l'<b>arrêt</b>
+  automatique n'intervient qu'à 0,30 — un effondrement non ambigu. Le poids 20,0 vient d'une
+  mesure : à <code>var_weight = 1,0</code> le garde-fou ne pesait que <b>0,55 %</b> de la perte au
+  moment de l'effondrement qu'il devait empêcher.</p>
+
+  <h3>5.4 · ℒ_pseudo — le pont vers la reconnaissance</h3>
+  <p>Le document source désigne ce mécanisme comme la finalité : « la reconnaissance robuste
+  s'effectuera en faisant générer, avec la fonction <i>softmax</i>, des pseudo-étiquettes par le
+  réseau PP, affinées par le réseau RE ». Ce mécanisme était <b>absent</b> de la première version
+  de <code>models_best</code> ; il a été ajouté (D-028) :</p>
+  <div class="eq">ℒ_pseudo = KL( softmax( cos(feature_PP, centroïdes) / τ )  ‖  softmax(logits_RE) )
+           K = 100 centroïdes k-means   ·   τ = 0,1   ·   cible DÉTACHÉE</div>
+  <p>Features et centroïdes sont L2-normalisés, donc le produit scalaire <b>est</b> le cosinus et
+  <code>softmax(cos/τ)</code> est littéralement la softmax du document. Les centroïdes sont
+  ajustés <b>une seule fois</b>, sur le PP figé en fin de Phase 2 : ils doivent décrire un
+  professeur stable, pas une cible mouvante. Un diagnostic d'entropie de la cible est journalisé —
+  proche de zéro, les centroïdes se sont effondrés sur une classe et la KL n'enseigne plus rien.</p>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 6 ══════════════════ -->
+<section id="s6">
+<div class="prose">
+  <span class="secnum">§ 6</span>
+  <h2 class="sec">Les données et leur préparation</h2>
+  <p class="standfirst">Le modèle ne voit jamais le signal propre. Tout se joue donc dans la
+  fabrication des observations bruitées — et c'est là que se trouvent les invariants les plus
+  faciles à casser en silence.</p>
+
+  <h3>6.1 · La chaîne de fabrication d'un exemple</h3>
+  <div class="eq">y                       énoncé propre           ← le modèle ne le voit JAMAIS
+y_rev  = y ∗ h_parole   énoncé réverbéré        ← la cible N2N implicite
+x1     = y_rev + a₀·(n₀ ∗ h₀)                   → PP et RE
+x2⁽ᵐ⁾  = y_rev + aₘ·(nₘ ∗ hₘ),  m = 1..3        → un PA chacun</div>
+
+  <div class="box limite">
+    <p class="lab">L'invariant critique, et le plus facile à casser</p>
+    <p><code>y_rev</code> doit être <b>rigoureusement identique</b> dans <code>x1</code> et dans
+    tous les <code>x2⁽ᵐ⁾</code>. N2N suppose deux observations bruitées du <i>même</i> signal
+    sous-jacent. Tirer une RIR de parole différente par branche produirait M signaux propres
+    différents et <b>casserait silencieusement la preuve</b> — sans qu'aucune perte ne diverge.
+    C'est pourquoi <code>self_check()</code> teste cette égalité <b>au bit près</b> (test E). La
+    variabilité de salle est obtenue <i>entre</i> énoncés, jamais à l'intérieur d'un énoncé.</p>
+  </div>
+
+  <h3>6.2 · Le corpus de parole propre</h3>
+  <p>Le paramètre <code>corpus_melange</code> a été l'objet d'un A/B à facteur unique. Le modèle
+  livré utilise <b>le corpus élargi</b>.</p>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Corpus</th><th class="num">Fichiers</th><th class="num">Part des tirages</th><th>Langue</th><th>Filtre qualité</th></tr></thead>
+  <tbody>
+    <tr><td>VoiceBank (28 locuteurs)</td><td class="num">11 572</td><td class="num">23,1 %</td><td>anglais</td><td>—</td></tr>
+    <tr><td>Common Voice FR</td><td class="num">38 571</td><td class="num">76,9 %</td><td>français</td><td>SNR interne ≥ 18 dB</td></tr>
+    <tr class="hi"><td><b>Total du corpus livré</b></td><td class="num"><b>50 143</b></td><td class="num">65,7 h</td><td>2 340 locuteurs</td><td>disjonction vérifiée</td></tr>
+    <tr><td><span class="u">état antérieur (Run A)</span></td><td class="num"><span class="u">VoiceBank seul</span></td><td class="num"><span class="u">9,7 h</span></td><td><span class="u">28 locuteurs, EN</span></td><td><span class="u">—</span></td></tr>
+  </tbody>
+  <caption>Trois conditions imposées par <code>data/corpus_mix.py</code> : filtrage par SNR
+  interne (tout bruit déjà présent dans la source est <i>partagé</i> entre <code>x1</code> et
+  <code>x2</code>, donc traité comme du signal et <b>conservé</b> par le N2N) ; proportion
+  <b>déclarée</b> et journalisée, jamais subie ; locuteurs vérifiés disjoints du corpus
+  d'évaluation, avec refus bruyant en cas d'intersection.</caption>
+</table>
+</div>
+<div class="prose">
+  <div class="box mesure">
+    <p class="lab">Effet mesuré du corpus — facteur unique</p>
+    <p>Taux de remplissage d'un segment de 5 s : <b>56,5 % → 83,4 %</b>. Les trames « bruit seul »
+    tombent de <b>43,5 % à 16,6 %</b>. Gain en PER : <b>−0,0418</b>, IC₉₅ disjoints. À déclarer :
+    Run B s'entraîne sur Common Voice FR, la <i>source</i> du corpus de sonde — les splits sont
+    vérifiés disjoints en locuteurs (2 351 / 208 / 212, intersections nulles) et en phrases, mais
+    le biais FR/EN de la sonde disparaît pour Run B et subsistait pour Run A. C'est une
+    non-comparabilité résiduelle, <b>favorable à Run B</b>.</p>
+  </div>
+
+  <h3>6.3 · Les bruits : familles disjointes</h3>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Rôle</th><th>Familles</th><th>Vue à l'entraînement ?</th></tr></thead>
+  <tbody>
+    <tr><td><code>x1</code> — PP et RE</td><td><code>us8k_mecanique</code> (drilling, jackhammer, engine_idling) · <code>us8k_impulsif</code> (gun_shot, car_horn, dog_bark)</td><td>oui</td></tr>
+    <tr><td><code>x2</code> — PA</td><td><code>us8k_stationnaire</code> · <code>us8k_humain</code> · <code>us8k_alarme</code></td><td>oui — <b>disjointes de x1</b></td></tr>
+    <tr><td>évaluation</td><td><code>musan_free</code> · <code>musan_bible</code> · bruit blanc · <code>in_domain</code></td><td><b>non</b></td></tr>
+  </tbody>
+  <caption>9 668 fichiers, 8 familles. Le regroupement est fait <b>par nature acoustique</b>
+  (mécanique / impulsif / humain), pas par étiquette : c'est ce qui fait qu'une disjonction de
+  familles est bien une disjonction <i>acoustique</i>. Si les deux côtés puisaient dans la même
+  famille, le réseau pourrait apparier le <i>type</i> de bruit au lieu d'apprendre l'invariance.</caption>
+</table>
+</div>
+<div class="prose">
+  <div class="box limite">
+    <p class="lab">Limite fondamentale du corpus de bruit</p>
+    <p><b>Aucune de ces familles n'est du bruit d'atelier.</b> Au mieux 18,8 % sont
+    « industriellement adjacents » et <b>0 % est du plancher d'usine</b>. Le bruit propre du
+    servomoteur KUKA — le seul bruit <i>garanti présent à chaque énoncé</i> — est structurellement
+    absent. La famille <code>in_domain</code> existe et contient <b>6 fichiers, 111,9 s</b> de
+    bruit d'atelier réel, utilisés <b>en évaluation seulement</b>. Une cellule de grille consomme
+    ~1 000 s de bruit tirées de ces 111,9 s : les valeurs <code>atelier</code> sont un ordre de
+    grandeur, pas une estimation de la performance en atelier.</p>
+  </div>
+
+  <h3>6.4 · La réverbération</h3>
+  <p>Le pipeline antérieur ne comportait <b>aucune</b> mention de RIR, de convolution de salle ou
+  de T60 : son modèle d'observation était <code>x = y + a·n</code>, c'est-à-dire de la parole
+  anéchoïque de studio. La réalité d'une cellule KUKA est
+  <code>x = (y ∗ h_salle) + Σ a_k·(n_k ∗ h_k)</code>. Le métal étant peu absorbant
+  (α ≈ 0,05–0,2), la cellule est <b>très réverbérante</b>.</p>
+  <dl class="facts">
+    <dt>méthode</dt><dd>simulation par sources-images (ISM), boîte métallique, coefficient de Sabine</dd>
+    <dt>T30 mesuré</dt><dd>≈ 0,7 s (cible T60 ∈ [0,4 ; 1,2] s)</dd>
+    <dt>cache</dt><dd>200 RIR pré-tirées, graine fixée</dd>
+    <dt>repli assumé</dt><dd><code>RIRBank(real_dir=…)</code> est prêt à recevoir des RIR mesurées (BUT ReverbDB, OpenSLR-28) — aucune n'est disponible localement</dd>
+  </dl>
+
+  <h3>6.5 · Le mélange au SNR, et un biais déclaré</h3>
+  <p>Le SNR de <code>x2</code> est <b>couplé</b> à celui de <code>x1</code> (± 3 dB) : découpler
+  fait exploser la variance de la cible, <code>E[x2|y] = y</code> étant vrai quel que soit le SNR.</p>
+  <div class="box limite">
+    <p class="lab">Biais d'étiquetage du SNR — mesuré, corrigé pour l'évaluation, conservé pour l'entraînement</p>
+    <p><code>mix_at_snr</code> calcule le SNR sur la <b>fenêtre entière</b>, silences et bourrage
+    compris. Conséquence mesurée sur 200 items du chargeur réel : le SNR réellement vécu
+    <i>pendant la parole</i> est supérieur au SNR annoncé de <b>+2,17 dB en moyenne, jusqu'à
+    +10,93 dB</b> ; sur les lots d'évaluation bourrés à 36,7 %, le biais atteignait +2,14 dB en
+    moyenne et +6,14 dB au maximum. Chaque étiquette de colonne SNR des grilles antérieures était
+    donc <b>optimiste d'environ 2 dB</b>.</p>
+    <p style="margin-top:9px">La fonction d'entraînement est <b>conservée telle quelle</b> — tous
+    les checkpoints publiés ont été entraînés avec elle, la changer romprait la comparabilité de
+    l'ensemble du dossier. Une seconde fonction, <code>mix_at_snr_actif</code>, calcule le SNR sur
+    la <b>région active</b> du signal et sert à toutes les grilles du § 11, qui portent donc des
+    étiquettes justes.</p>
+  </div>
+
+  <h3>6.6 · Le contrôle bloquant <code>self_check()</code></h3>
+  <p>Avant la première mise à jour de poids, sept familles de tests vérifient les invariants
+  MULTINOISE. <b>Une violation empêche l'entraînement de démarrer.</b> Résultat sur le chargeur
+  livré : <b>97 tests sur 97</b>.</p>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Test</th><th>Ce qu'il vérifie</th><th>La panne silencieuse qu'il attrape</th></tr></thead>
+  <tbody>
+    <tr><td>C</td><td>appariement strict <code>PA_m ↔ n_m</code>, forme <code>(B, M, L)</code></td><td>un <code>x2</code> unique diffusé aux M professeurs — le défaut fondateur</td></tr>
+    <tr><td>E</td><td><code>y_rev</code> identique au bit près entre toutes les branches</td><td>M signaux propres différents ⇒ la preuve N2N ne s'applique plus</td></tr>
+    <tr><td>G</td><td>corrélation croisée des bruits « indépendants »</td><td><b>attrapé en pratique</b> : un offset DC amplifié par les RIR corrélait les bruits à <b>0,544</b>. Après correctif : <b>0,044</b> max</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 7 ══════════════════ -->
+<section id="s7">
+<div class="prose">
+  <span class="secnum">§ 7</span>
+  <h2 class="sec">Les trois phases d'entraînement</h2>
+  <p class="standfirst">51 000 pas au total, ≈ 3,6 h sur RTX 4090. Chaque phase gèle un réseau,
+  en entraîne un autre, et inverse le sens du gradient de ℒ_PPA.</p>
+</div>
+
+<figure>
+  <p class="figtitle">Qui apprend, qui est gelé, dans quel sens va le gradient</p>
+  <p class="figsub">Le même terme ℒ_PPA change de direction entre les Phases 1 et 2 — c'est le
+  curriculum d'échauffement des professeurs assistants.</p>
+  <div class="svgscroll">
+  <svg viewBox="0 0 960 210" role="img" aria-label="Trois phases : en phase 1 le professeur principal est gelé et les assistants apprennent vers lui ; en phase 2 les assistants sont gelés et le professeur principal apprend vers leur agrégat ; en phase 3 professeurs et assistants sont gelés et seul l'étudiant apprend.">
+    <defs>
+      <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#12507F"/>
+      </marker>
+    </defs>
+    <g font-family="IBM Plex Mono, monospace" font-size="11.5" fill="currentColor">
+      <!-- phase 1 -->
+      <text x="20" y="24" font-family="IBM Plex Sans Condensed, sans-serif" font-size="14" font-weight="600">PHASE 1 · 19 800 pas</text>
+      <text x="20" y="42" font-size="10.5" fill="#68757F">ℒ_PPA · grad_to = "pa"</text>
+      <rect x="20" y="58" width="120" height="46" rx="3" fill="none" stroke="currentColor" stroke-dasharray="4 3"/>
+      <text x="80" y="79" text-anchor="middle">PP</text>
+      <text x="80" y="94" text-anchor="middle" font-size="9.5" fill="#68757F">GELÉ</text>
+      <rect x="200" y="58" width="120" height="46" rx="3" fill="none" stroke="#12507F" stroke-width="1.6"/>
+      <text x="260" y="79" text-anchor="middle" fill="#12507F">PA × 3</text>
+      <text x="260" y="94" text-anchor="middle" font-size="9.5" fill="#12507F">apprennent</text>
+      <path d="M200 81 L146 81" stroke="#12507F" fill="none" marker-end="url(#ar2)"/>
+      <text x="173" y="120" text-anchor="middle" font-size="9.5" fill="#12507F">gradient</text>
+      <text x="20" y="146" font-size="10.5" fill="#68757F">les assistants s'ancrent sur le professeur figé ;</text>
+      <text x="20" y="162" font-size="10.5" fill="#68757F">leur moyenne devient la cible de la phase suivante</text>
+
+      <!-- phase 2 -->
+      <text x="360" y="24" font-family="IBM Plex Sans Condensed, sans-serif" font-size="14" font-weight="600">PHASE 2 · 22 200 pas</text>
+      <text x="360" y="42" font-size="10.5" fill="#68757F">ℒ_PPA · grad_to = "pp"</text>
+      <rect x="360" y="58" width="120" height="46" rx="3" fill="none" stroke="#12507F" stroke-width="1.6"/>
+      <text x="420" y="79" text-anchor="middle" fill="#12507F">PP</text>
+      <text x="420" y="94" text-anchor="middle" font-size="9.5" fill="#12507F">apprend</text>
+      <rect x="540" y="58" width="120" height="46" rx="3" fill="none" stroke="currentColor" stroke-dasharray="4 3"/>
+      <text x="600" y="79" text-anchor="middle">PA × 3</text>
+      <text x="600" y="94" text-anchor="middle" font-size="9.5" fill="#68757F">GELÉS de fait</text>
+      <path d="M486 81 L534 81" stroke="#12507F" fill="none" marker-end="url(#ar2)"/>
+      <text x="510" y="120" text-anchor="middle" font-size="9.5" fill="#12507F">gradient</text>
+      <text x="360" y="146" font-size="10.5" fill="#68757F">le professeur est tiré vers la cible marginalisée</text>
+      <text x="360" y="162" font-size="10.5" fill="#68757F">sur le bruit — il la suit à 97 %</text>
+
+      <!-- phase 3 -->
+      <text x="700" y="24" font-family="IBM Plex Sans Condensed, sans-serif" font-size="14" font-weight="600">PHASE 3 · 9 000 pas</text>
+      <text x="700" y="42" font-size="10.5" fill="#68757F">ℒ_PE + ℒ_PAE + ℒ_pseudo</text>
+      <rect x="700" y="58" width="100" height="46" rx="3" fill="none" stroke="currentColor" stroke-dasharray="4 3"/>
+      <text x="750" y="79" text-anchor="middle">PP · PA</text>
+      <text x="750" y="94" text-anchor="middle" font-size="9.5" fill="#68757F">GELÉS</text>
+      <rect x="840" y="58" width="100" height="46" rx="3" fill="none" stroke="#12507F" stroke-width="1.6"/>
+      <text x="890" y="79" text-anchor="middle" fill="#12507F">RE</text>
+      <text x="890" y="94" text-anchor="middle" font-size="9.5" fill="#12507F">apprend</text>
+      <path d="M806 81 L834 81" stroke="#12507F" fill="none" marker-end="url(#ar2)"/>
+      <text x="700" y="146" font-size="10.5" fill="#68757F">l'étudiant absorbe les deux canaux ;</text>
+      <text x="700" y="162" font-size="10.5" fill="#68757F">c'est le seul réseau livré</text>
+
+      <line x1="20" y1="188" x2="940" y2="188" stroke="currentColor" opacity=".2"/>
+    </g>
+  </svg>
+  </div>
+  <p style="font-size:13.5px;color:var(--ink-2);margin:14px 0 0;max-width:70ch">
+  <b>Ce qui est mesuré pendant</b> : critère pilote à chaque époque (banc général, sans étiquette),
+  dispersion inter-PA, ratio de richesse, norme du gradient, mémoire GPU, s/pas — une ligne JSON par
+  pas. <b>Ce qui est mesuré après le dernier pas</b>, sur modèle gelé : la sonde CTC de contenu,
+  3 à 5 graines. Le réseau sondé <i>pendant</i> l'entraînement est celui qui bouge — le PP en
+  Phases 1–2, le RE en Phase 3 : sonder le seul RE laisserait aveugle pendant 70 époques sur 85.</p>
+  <figcaption>Le tableau de <code>train.py</code> annonçait « optimiseur : PP + PA » en Phase 2.
+  C'était <b>faux</b>, et vérifié sur checkpoints : <b>0 tenseur de PA modifié sur 753</b> entre
+  la fin de P1 et la fin de P2, écart exactement 0,0. Cause : <code>grad_to="pp"</code> détache
+  l'agrégat, et aucun autre terme ne touche les PA. Ce n'est pas un bug à corriger — l'ablation M8
+  a montré que les dégeler détruit le pipeline. Seule la documentation était fausse.</figcaption>
+</figure>
+
+<div class="tw">
+<table>
+  <thead><tr><th>Phase</th><th>Mode</th><th>Gelé</th><th>Optimiseur</th><th>LR</th><th class="num">Pas réels</th><th>Pertes actives</th></tr></thead>
+  <tbody>
+    <tr><td><b>1</b></td><td><code>pa</code></td><td>PP</td><td>PA (286,7 M)</td><td class="num">5 e−5</td><td class="num">19 800<br><span class="u">33 ép × 600</span></td><td>ℒ_PPA + richesse(PP)</td></tr>
+    <tr><td><b>2</b></td><td><code>ppa</code></td><td>PA <span class="u">(de fait)</span></td><td>PP (94,4 M)</td><td class="num">1 e−5</td><td class="num">22 200<br><span class="u">37 ép × 600</span></td><td>ℒ_PPA + richesse(PP)</td></tr>
+    <tr class="hi"><td><b>3</b></td><td><code>distill</code></td><td>PP et PA</td><td><b>RE seul</b></td><td class="num">1 e−4<br><span class="u">cosinus → 5 %</span></td><td class="num">9 000<br><span class="u">15 ép × 600</span></td><td>ℒ_PE + ℒ_PAE + ℒ_pseudo + richesse(RE)</td></tr>
+  </tbody>
+  <caption>AdamW, <code>weight_decay = 0,01</code>, <code>grad_clip = 5,0</code>,
+  <code>warmup = 500</code> pas, <code>batch_size = 4</code>, <code>seed = 42</code>.
+  <b>Une « époque » est ici un intervalle d'évaluation de 600 pas</b>, pas un passage sur tout le
+  corpus : avec 2 893 pas/époque réels, recopier les compteurs hérités aurait donné 14,7 h de
+  calcul par simple recopie d'un nombre.</caption>
+</table>
+</div>
+
+<div class="prose">
+  <h3>7.1 · La décroissance cosinus du LR — une instabilité, pas un manque d'entraînement</h3>
+  <p>Sans elle, le critère pilote du RE oscille violemment en fin de Phase 3 : <b>0,219 à
+  l'époque 9 → 0,368 à l'époque 12</b>. Le problème n'était donc pas la durée mais la stabilité.
+  <code>lr_re_cosine = True</code>, <code>lr_re_min_ratio = 0,05</code>.</p>
+
+  <h3>7.2 · La supervision active — cinq pathologies définies <i>à l'avance</i></h3>
+  <p>On ne lance pas un entraînement pour « voir ce que ça donne ». Les signatures d'un
+  entraînement pathologique sont définies avant le run, dans <code>train/monitor.py</code>, et
+  l'entraînement <b>s'arrête</b> dès qu'une est rencontrée.</p>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th class="num">#</th><th>Signature</th><th>Seuil</th><th>Pourquoi elle compte ici</th></tr></thead>
+  <tbody>
+    <tr><td class="num">1</td><td>NaN / Inf</td><td class="num">—</td><td>corruption franche ; laisser tourner détruit le checkpoint</td></tr>
+    <tr><td class="num">2</td><td>divergence</td><td class="num">&gt; 10× la médiane glissante</td><td>LR trop grand ou cible instable</td></tr>
+    <tr><td class="num">3</td><td><b>effondrement des représentations</b></td><td class="num">richesse &lt; 0,30 × réf</td><td><b>LA pathologie de ce projet</b> : l'invariance s'obtient trivialement en contractant. <b>Invisible dans la perte — elle baisse pendant que le modèle se dégrade</b></td></tr>
+    <tr><td class="num">4</td><td>gradient explosé / évanoui</td><td class="num">&gt; 1 e4 · &lt; 1 e−7</td><td>rupture de la chaîne de distillation</td></tr>
+    <tr><td class="num">5</td><td><b>effondrement mutuel des PA</b></td><td class="num">dispersion ≈ 0</td><td>l'agrégation redevient décorative et MULTINOISE est annulée en aval</td></tr>
+  </tbody>
+  <caption>Les pathologies 3 et 5 sont <b>spécifiques à cette architecture</b> et
+  n'apparaîtraient dans aucun moniteur générique : ce sont précisément celles qui ont coûté des
+  versions entières au projet.</caption>
+</table>
+</div>
+<div class="prose">
+  <div class="box limite">
+    <p class="lab">Ce qu'un moniteur d'échelle ne peut pas voir</p>
+    <p>Le run d'ablation M8 a produit une représentation <b>pire que le hasard</b>
+    (PER 0,9782 contre 0,9598) avec <b>tous les voyants au vert</b> : richesse 0,700, gradients
+    bornés, aucune alerte. Un moniteur d'échelle est structurellement incapable de voir une
+    destruction de <i>contenu</i>. D'où l'ajout d'une <b>sonde de fin de run</b> — exécutée après
+    le dernier pas, sur un modèle gelé, donc sans pouvoir influencer l'entraînement, et vérifiée
+    au démarrage pour qu'une dépendance manquante ne se découvre pas après 3 h 40.</p>
+  </div>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 8 ══════════════════ -->
+<section id="s8">
+<div class="prose">
+  <span class="secnum">§ 8</span>
+  <h2 class="sec">Les paramètres du modèle livré</h2>
+  <p class="standfirst">Le dépôt contient 78 paramètres de configuration. Voici ceux qui
+  définissent le modèle livré, leur valeur, et l'effet mesuré de chacun. <b>Les défauts du dépôt
+  ne décrivent pas le modèle livré</b> — ils décrivent un run remplacé le 13 août.</p>
+</div>
+
+<div class="tw">
+<table>
+  <thead><tr><th>Paramètre</th><th class="num">Valeur livrée</th><th class="num">Défaut du dépôt</th><th>Effet, et pourquoi cette valeur</th></tr></thead>
+  <tbody>
+    <tr><td colspan="4" style="background:var(--surface-3);font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.08em;color:var(--muted)">ARCHITECTURE</td></tr>
+    <tr><td><code>pp_model_name</code></td><td class="num">wavlm-base-plus</td><td class="num">idem</td><td>professeur pré-entraîné <i>avec</i> du bruit ; HuBERT ne connaît que le propre</td></tr>
+    <tr class="hi"><td><code>re_layers</code></td><td class="num"><b>4</b></td><td class="num">2</td><td><b>le plus gros gain isolé du projet : −0,0997 de PER</b>, facteur unique, IC₉₅ disjoints</td></tr>
+    <tr><td><code>taps</code></td><td class="num"><b>(6, 8, 12)</b></td><td class="num">(4, 8, 12)</td><td>échantillonne la hiérarchie phonétique / sémantique. <span class="chip wr">facteur jamais isolé</span></td></tr>
+    <tr><td><code>num_pa</code> · <code>pa_layers</code></td><td class="num">3 · 12</td><td class="num">idem</td><td>M = 3 n'a jamais été ablé ; M_eff mesuré à 1,45 (§ 12.4)</td></tr>
+    <tr><td colspan="4" style="background:var(--surface-3);font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.08em;color:var(--muted)">DONNÉES</td></tr>
+    <tr class="hi"><td><code>corpus_melange</code></td><td class="num"><b>True</b></td><td class="num">False</td><td>9,7 h → 65,7 h, 28 → 2 340 locuteurs : <b>−0,0418</b> de PER</td></tr>
+    <tr><td><code>corpus_snr_min</code></td><td class="num">18,0 dB</td><td class="num">idem</td><td>le bruit déjà présent dans la source est <i>conservé</i> par le N2N</td></tr>
+    <tr><td><code>snr_range</code></td><td class="num">(−10, +15)</td><td class="num">idem</td><td><span class="chip no">dépend d'une mesure de terrain non faite</span></td></tr>
+    <tr><td><code>snr_couple_delta</code></td><td class="num">± 3 dB</td><td class="num">idem</td><td>découpler ferait exploser la variance de la cible. <span class="chip wr">mesure mécanique contraire au motif (§ 12.4)</span></td></tr>
+    <tr><td><code>use_rir</code> · <code>n_rir_cache</code></td><td class="num">True · 200</td><td class="num">idem</td><td>absente de tout le pipeline antérieur</td></tr>
+    <tr><td><code>x2_unique</code></td><td class="num">False</td><td class="num">False</td><td><code>True</code> reproduit délibérément le défaut historique, pour l'ablation seule</td></tr>
+    <tr><td colspan="4" style="background:var(--surface-3);font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.08em;color:var(--muted)">PERTES</td></tr>
+    <tr><td><code>alpha_pe</code> · <code>beta_ppa</code> · <code>gamma_pae</code></td><td class="num">1,0 · 1,0 · 2,0</td><td class="num">idem</td><td>γ relevé sur mesure : la cible de ℒ_PAE (0,067) est meilleure que celle de ℒ_PE (0,108)</td></tr>
+    <tr><td><code>ppa_asymmetric</code></td><td class="num">True</td><td class="num">idem</td><td>stop-gradient — sans lui, effondrement mutuel (κ_propre − κ = −0,082)</td></tr>
+    <tr><td><code>ppa_normalize</code></td><td class="num">True</td><td class="num">idem</td><td>retire la cause racine de l'effondrement d'échelle (§ 5.2)</td></tr>
+    <tr><td><code>var_weight</code> · <code>var_target_ratio</code></td><td class="num">20,0 · 0,7</td><td class="num">idem</td><td>à 1,0 le garde-fou pesait 0,55 % de la perte : inopérant</td></tr>
+    <tr><td><code>num_pseudo_labels</code> · <code>pseudo_temp</code></td><td class="num">100 · 0,1</td><td class="num">idem</td><td>K = 100 comme HuBERT itération 1</td></tr>
+    <tr><td><code>lambda_pseudo</code></td><td class="num">0,5</td><td class="num">idem</td><td>poids de la KL en Phase 3</td></tr>
+    <tr class="hi"><td><code>pp_eval_phase3</code></td><td class="num"><b>True</b></td><td class="num">True <span class="u">(depuis le 13/08)</span></td><td>couper le masquage du PP en Phase 3 : <b>−0,0059</b> de PER, t = −6,33, 5/5 graines</td></tr>
+    <tr><td><code>pa_train_phase2</code></td><td class="num">False</td><td class="num">False</td><td><code>True</code> ⇒ PER 0,9782, <b>pire que le hasard</b></td></tr>
+    <tr><td><code>pae_use_tpe_a</code></td><td class="num">False</td><td class="num">False</td><td>la tête non entraînée dégradait la cible d'un facteur 3</td></tr>
+    <tr><td><code>decoder_enabled</code></td><td class="num">False</td><td class="num">False</td><td>la sortie livrée est la représentation, pas la forme d'onde</td></tr>
+    <tr><td colspan="4" style="background:var(--surface-3);font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.08em;color:var(--muted)">OPTIMISATION</td></tr>
+    <tr><td><code>batch_size</code> · <code>steps_per_epoch</code></td><td class="num">4 · 600</td><td class="num">idem</td><td>8 provoque un OOM sur 24 Go — mesuré, pas choisi</td></tr>
+    <tr><td><code>lr_pp</code> · <code>lr_pa</code> · <code>lr_re</code></td><td class="num">1e−5 · 5e−5 · 1e−4</td><td class="num">idem</td><td>LR faible sur le PP : c'est du <i>continued pretraining</i></td></tr>
+    <tr class="hi"><td><b>budgets réels</b></td><td class="num"><b>33 / 37 / 15</b></td><td class="num">10 / 60 / 15</td><td>voir l'avertissement du § 1.3 — le <code>config.json</code> du run est faux sur ce point</td></tr>
+    <tr><td><code>seed</code></td><td class="num">42</td><td class="num">idem</td><td>graine unique du run ; la variabilité mesurée est celle des <i>sondes</i></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="prose">
+  <div class="box limite">
+    <p class="lab">Paramètres qui ne pilotent rien — déclaré</p>
+    <p>Sur les 78 champs, un audit ligne-à-ligne a établi que <b>huit ne sont lus par aucun code
+    de production</b>, dont <code>var_scope</code> (lu par une assertion seulement) et
+    <code>pa_warmup_epochs</code>, pourtant déclaré « décisif » dans un commentaire. Un paramètre
+    déclaré mais mort est un piège pour quiconque reprendra le dépôt : il est ici listé plutôt que
+    supprimé, pour que la correction soit possible sans archéologie.</p>
+  </div>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 9 ══════════════════ -->
+<section id="s9">
+<div class="prose">
+  <span class="secnum">§ 9</span>
+  <h2 class="sec">Écarts assumés à l'architecture de référence</h2>
+  <p class="standfirst">Sept écarts à la figure 1 et à la méthode du document source. Chacun est
+  fondé sur une mesure de ce projet, pas sur une préférence — et chacun reste réversible par un
+  drapeau de configuration.</p>
+</div>
+
+<div class="tw">
+<table>
+  <thead><tr><th>Prescription d'origine</th><th>Ce qui est implémenté</th><th>La mesure qui justifie l'écart</th></tr></thead>
+  <tbody>
+    <tr><td>Professeur = <b>HuBERT</b></td><td><b>WavLM Base+</b></td><td>un professeur pré-entraîné sur du propre ne peut pas transmettre de robustesse ; ses représentations d'un signal bruité sont hors-distribution pour lui-même</td></tr>
+    <tr><td>Fig. 1a : <b>doubles flèches</b> (gradients bidirectionnels)</td><td><b>ASYM-PPA</b> — stop-gradient côté cible</td><td>effondrement mutuel mesuré : κ_propre − κ = <b>−0,082</b> sans, +0,05 à +0,07 avec. Ablation M8 : PER <b>0,9782</b></td></tr>
+    <tr><td>un <code>x2</code> pour les M assistants</td><td><b>MULTINOISE</b> — un bruit par assistant</td><td>dispersion inter-PA <b>0,00 → 0,35</b> ; l'agrégat devient un estimateur Monte-Carlo au lieu d'une décoration</td></tr>
+    <tr><td>tête <b>TPE_A</b> sur chaque assistant</td><td>contournée — moyenne des <code>last_hidden</code></td><td>tête jamais entraînée : WER de sonde <b>0,067 → 0,217</b> si on l'utilise</td></tr>
+    <tr><td>« RE = DistilHuBERT, poids publics »</td><td><b><code>init_from_pp</code></b> — copie des couches du PP</td><td>incompatible avec PP = WavLM ; le CNN doit être celui du professeur, sinon les cibles sont inatteignables. Les poids publics restent testables — et sont <i>battus</i> (§ 11)</td></tr>
+    <tr><td>garde-fou de richesse dans le <b>critère</b></td><td>garde-fou <b>dans la perte</b>, sur les trois taps</td><td>aucun checkpoint ne cumulait κ ≥ 0,5 et T4 ≥ 0,5 ; protéger le seul dernier tap a coûté −32 % sur T4 et −36 % sur T8</td></tr>
+    <tr><td>décodeur de forme d'onde + terme MR-STFT</td><td><b>désactivé</b></td><td>le terme MR-STFT opère sur un module, <b>convexe</b> : <code>E[|S+N|] ≥ |S|</code>, il est démontrablement biaisé et viole N2N. Et D1 : aucun débruiteur n'améliore aucun ASR</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="prose">
+  <div class="box">
+    <p class="lab">Désambiguïsation nécessaire</p>
+    <p>Le projet contient deux corrections nommées « B1 » <b>sans rapport</b> entre elles : celle
+    d'une version antérieure (gradients bidirectionnels) est <b>réfutée</b> ; celle du cahier des
+    charges (multi-bruit) est <b>implémentée ici</b>. Elles ont été renommées <b>ASYM-PPA</b> et
+    <b>MULTINOISE</b> pour rendre la confusion impossible.</p>
+  </div>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 10 ══════════════════ -->
+<section id="s10">
+<div class="prose">
+  <span class="secnum">§ 10</span>
+  <h2 class="sec">L'instrument de mesure</h2>
+  <p class="standfirst">Aucun résultat n'a de sens sans l'instrument qui le produit. Celui-ci a
+  été corrigé quatre fois, et chaque correction a changé un chiffre du dossier.</p>
+
+  <h3>10.1 · La sonde CTC — ce qu'elle demande</h3>
+  <p>Question posée : <b>« cette représentation contient-elle de l'information phonétique ? »</b>
+  Protocole de type SUPERB : l'encodeur est <b>gelé</b>, une tête <b>strictement linéaire</b> est
+  entraînée par-dessus, et l'on mesure le <b>PER</b> (taux d'erreur phonémique). Une tête linéaire
+  ne peut rien inventer : ce qu'elle lit était déjà dans la représentation.</p>
+  <dl class="facts">
+    <dt>corpus</dt><dd>Common Voice FR phonémisé par espeak <code>fr-fr</code>, 42 phonèmes + blanc CTC</dd>
+    <dt>budget</dt><dd>2 000 énoncés × 15 époques, identique pour tous les encodeurs comparés</dd>
+    <dt>test</dt><dd>200 énoncés du split test, graine 0 en dur, locuteurs inédits</dd>
+    <dt>graines</dt><dd>5 par cellule ; l'ordre des lots et les réalisations de bruit sont fixés par <code>RandomState(1000 + graine)</code>, réinitialisé par cellule</dd>
+    <dt>conception</dt><dd><b>appariée</b> — mêmes énoncés et mêmes réalisations de bruit pour toutes les colonnes ; test t apparié par graine</dd>
+    <dt>règle de conclusion</dt><dd>IC₉₅ <b>disjoints dans les deux sens</b>, sinon <span class="chip nt">non tranché</span></dd>
+  </dl>
+
+  <h3>10.2 · Les quatre corrections d'instrument, et ce qu'elles ont changé</h3>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Correction</th><th>Date</th><th>Ce qui était faux</th><th>Effet sur les chiffres</th></tr></thead>
+  <tbody>
+    <tr><td>retrait du symbole de frontière de mot <code>|</code></td><td>D-041</td><td>le PER était gonflé par un symbole qui n'est pas un phonème</td><td>redéfinit toute l'échelle du PER</td></tr>
+    <tr><td>exclusion des graines effondrées de la table de référence</td><td>15 août</td><td><b>14 mesures contaminées</b> : la table centrale « WavLM public par couche » moyennait des graines au niveau du hasard</td><td>c8 <b>0,3882 → 0,2631</b> · c10 <b>0,3708 → 0,2409</b> · c12 <b>0,4134 → 0,2831</b>. <b>Trois conclusions du dossier ont été renversées</b></td></tr>
+    <tr><td>SNR calculé sur la <b>région active</b></td><td>18 août</td><td>étiquettes de colonne optimistes d'environ <b>+2 dB</b></td><td>toutes les grilles du § 11 sont recalculées ; les grilles antérieures ne sont plus citées</td></tr>
+    <tr><td>bourrage laissé à zéro + PER <b>micro</b> publié à côté du macro</td><td>18 août</td><td>36,7 % de bourrage entrait dans le calcul du SNR ; le PER macro seul n'est comparable à aucune table publiée</td><td>écart macro/micro &lt; 0,005 sur toutes les cellules — le dossier publie les deux</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="prose">
+  <div class="box limite">
+    <p class="lab">Ce que l'exclusion de graines a renversé — à lire, c'est important</p>
+    <p>Trois affirmations antérieures du dossier étaient <b>fausses</b> et sont corrigées :
+    « la Phase 2 enrichit le PP en profondeur » (en réalité le PP est <b>dégradé à toutes les
+    couches</b>) ; « l'Agrégation I enrichit aux taps 8 et 12 » (en réalité elle est
+    <b>pire que le WavLM public aux trois taps</b>) ; « le profil du WavLM est en U avec un minimum
+    en couche 6 » (le minimum est en <b>couche 10</b>). Le critère d'exclusion est déclaré : une
+    graine est effondrée si elle vaut ≥ 0,85 <i>et</i> dépasse d'au moins 0,10 la médiane de ses
+    sœurs — ce qui sépare l'effondrement d'une condition simplement difficile.</p>
+  </div>
+
+  <h3>10.3 · Les repères de l'échelle</h3>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Repère</th><th class="num">PER</th><th>Lecture</th></tr></thead>
+  <tbody>
+    <tr><td>hasard analytique</td><td class="num">0,9598</td><td>plancher — une cellule au-dessus n'est <b>pas informative</b></td></tr>
+    <tr><td>MFCC-40</td><td class="num">0,8831</td><td>extracteur acoustique classique, sans apprentissage</td></tr>
+    <tr><td>WavLM Base+ public, couche 2</td><td class="num">0,4200</td><td>plafond théorique d'un RE à 2 couches</td></tr>
+    <tr class="hi"><td><b>WavLM Base+ public, couche 4</b></td><td class="num"><b>0,3130</b></td><td><b>plafond théorique du RE livré</b> — il en atteint <b>97,2 %</b></td></tr>
+    <tr><td>WavLM Base+ public, couche 10</td><td class="num">0,2409</td><td>minimum du modèle public sur audio propre</td></tr>
+  </tbody>
+  <caption>Table corrigée, 5 graines saines par couche. Ces repères sont mesurés sur audio
+  <b>propre</b> : ils ne disent rien de l'ordre des encodeurs <i>sous bruit</i> — le § 11 montre
+  que cet ordre s'inverse.</caption>
+</table>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 11 ══════════════════ -->
+<section id="s11">
+<div class="prose">
+  <span class="secnum">§ 11</span>
+  <h2 class="sec">Les résultats du réseau étudiant</h2>
+  <p class="standfirst">Grille complète : 5 encodeurs × 3 familles de bruit × 8 niveaux de SNR ×
+  5 graines, conception appariée, instrument corrigé du 18 août, locuteurs inédits.
+  <b>Tous les encodeurs sont gelés et reçoivent la même tête linéaire, entraînée sur audio
+  propre, au même budget.</b></p>
+
+  <h3>11.1 · Les cinq encodeurs comparés</h3>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Encodeur</th><th class="num">Paramètres</th><th>Ce qu'il représente dans la comparaison</th></tr></thead>
+  <tbody>
+    <tr class="hi"><td><b>RE livré</b> — 4 couches</td><td class="num">37 673 936</td><td>le livrable</td></tr>
+    <tr><td><b>WavLM c4</b></td><td class="num">94 381 936</td><td><b>son initialisation exacte</b> — <code>init_from_pp</code> en copie littéralement les 4 premières couches. La comparaison isole ce que l'entraînement a ajouté, et rien d'autre</td></tr>
+    <tr><td><b>DistilHuBERT</b></td><td class="num">23 491 968</td><td><b>méthode publiée</b>, poids publics <code>ntu-spml/distilhubert</code> — la seule vraie comparaison externe du dossier</td></tr>
+    <tr><td><b>Contrôle public</b></td><td class="num">37 673 936</td><td>même architecture que le RE livré, <b>sans les Phases 1–2</b> : mesure ce que l'échafaudage professoral apporte</td></tr>
+    <tr><td><b>Run B</b> — 2 couches</td><td class="num">23 497 128</td><td>l'étape précédente du projet, même corpus, <code>re_layers = 2</code> : isole l'effet de la profondeur</td></tr>
+  </tbody>
+</table>
+</div>
+
+<figure>
+  <p class="figtitle">PER en fonction du SNR, par famille de bruit</p>
+  <p class="figsub">Plus bas est meilleur. Ligne pointillée : niveau du hasard (0,9598) — au-dessus,
+  la cellule n'est pas informative.</p>
+  <div class="filters" role="group" aria-label="Famille de bruit">
+    <button data-fam="pool" aria-pressed="true">pool — familles vues</button>
+    <button data-fam="blanc" aria-pressed="false">bruit blanc — inédit</button>
+    <button data-fam="atelier" aria-pressed="false">atelier réel — inédit</button>
+  </div>
+  <div class="legend" id="lg-grid"></div>
+  <div id="ch-grid"></div>
+  <details class="tv"><summary>▸ voir les valeurs (tableau)</summary><div id="tb-grid"></div></details>
+  <figcaption>Le RE livré est <b>en dessous de tous les autres dans les 15 cellules de la bande
+  cible</b> (−5 à +15 dB, trois familles). Le contrôle sans Phases 1–2 dépasse 1,0 dans le bruit :
+  sa tête produit des insertions massives — un PER &gt; 1 est possible et signale un
+  effondrement, non un plancher.</figcaption>
+</figure>
+
+<div class="prose">
+  <h3>11.2 · Le résultat central, en une ligne par encodeur</h3>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Encodeur</th><th class="num">Propre</th><th class="num">Bande cible<br>−5..+15 dB</th><th class="num">Sensibilité<br>au bruit</th><th class="num">Cellules perdues<br>face au RE</th></tr></thead>
+  <tbody>
+    <tr class="hi"><td><b>RE livré</b> · 4 couches, 37,7 M</td><td class="num">0,3445</td><td class="num"><b>0,5898</b></td><td class="num"><b>+0,245</b></td><td class="num">—</td></tr>
+    <tr><td>WavLM c4 — son initialisation</td><td class="num"><b>0,3190</b></td><td class="num">0,7564</td><td class="num">+0,437</td><td class="num"><b>15 / 15</b></td></tr>
+    <tr><td>DistilHuBERT — méthode publiée</td><td class="num">0,3233</td><td class="num">0,8059</td><td class="num">+0,483</td><td class="num"><b>15 / 15</b></td></tr>
+    <tr><td>Contrôle sans Phases 1–2</td><td class="num">0,3054</td><td class="num">0,9586</td><td class="num">+0,653</td><td class="num">12 / 15</td></tr>
+    <tr><td>Run B — 2 couches</td><td class="num">0,5290</td><td class="num">0,7021</td><td class="num">+0,173</td><td class="num"><b>15 / 15</b></td></tr>
+  </tbody>
+  <caption>« Sensibilité au bruit » = PER moyen dans la bande cible moins PER sur audio propre :
+  ce que le bruit <i>coûte</i> à chaque encodeur. Le RE est <b>1,78 × moins sensible</b> que son
+  initialisation : 0,245 contre 0,437. <span class="u">Le bilan du 15 août citait un facteur 2,13
+  (0,1735 contre 0,3700) : il était calculé sur l'instrument <b>antérieur</b>, dont les étiquettes
+  de SNR étaient optimistes d'environ 2 dB. Le facteur donné ici est celui de l'instrument
+  corrigé — c'est lui qui fait foi.</span> Comptage des cellules sur les moyennes de 5 graines ; le
+  manifeste du dépôt cite 10/15 pour le contrôle sous son critère apparié plus strict.
+  <b>Run B a la plus faible sensibilité — mais son PER absolu reste partout supérieur au RE
+  livré : il part de bien plus haut.</b></caption>
+</table>
+</div>
+
+<figure>
+  <p class="figtitle">Ce que le pipeline achète, et ce qu'il paie</p>
+  <p class="figsub">Écart de PER entre le RE livré et son initialisation exacte, moyenné sur les
+  trois familles de bruit. Vers la gauche = le RE est meilleur.</p>
+  <div id="ch-gain"></div>
+  <details class="tv"><summary>▸ voir le détail par famille</summary><div id="tb-gain"></div></details>
+  <figcaption>La lecture tient en une phrase : <b>le pipeline échange du contenu sur parole propre
+  contre de l'invariance au bruit.</b> Il perd <b>+0,025</b> au calme et gagne
+  <b>−0,224</b> à 0 dB en moyenne, jusqu'à <b>−0,279</b> sur le bruit blanc. Le gain est maximal autour de 0 dB et s'annule aux deux extrêmes : au calme
+  il n'y a rien à sauver, à −20 dB il n'y a plus rien à sauver.</figcaption>
+</figure>
+
+<div class="prose">
+  <h3>11.3 · Le détail par niveau de bruit, famille par famille</h3>
+  <p>Ce tableau est le cœur du dossier. Il répond à la question « à quel dB le modèle sert-il
+  encore ? » — et la réponse dépend de la famille de bruit.</p>
+</div>
+<div class="tw" id="tb-full"></div>
+
+<div class="prose">
+  <h3>11.4 · L'effet de la profondeur du RE : 2 couches contre 4</h3>
+  <p>C'est le plus gros gain isolé du projet, et il ne vient pas de la méthode mais d'un entier.
+  Comparaison à <b>facteur unique</b> — mêmes PP, mêmes PA, mêmes données, même budget :</p>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Configuration</th><th class="num">PER (sonde, propre)</th><th class="num">IC₉₅</th><th class="num">Graines</th><th>Plafond théorique</th></tr></thead>
+  <tbody>
+    <tr><td>taps (6,8,12) + budget 33/37/15, <b>RE 2 couches</b></td><td class="num">0,4218</td><td class="num">± 0,0078</td><td class="num">2 saines / 3</td><td>WavLM c2 = 0,4200</td></tr>
+    <tr class="hi"><td><b>+ RE à 4 couches</b></td><td class="num"><b>0,3221</b></td><td class="num">± 0,0015</td><td class="num">4 saines / 5</td><td>WavLM c4 = <b>0,3130</b></td></tr>
+    <tr><td colspan="5"><b>Écart : −0,0997, IC₉₅ disjoints.</b> L'élève à 4 couches atteint <b>97,2 %</b> de son plafond théorique.</td></tr>
+  </tbody>
+  <caption>Interprétation à ne pas dépasser : la profondeur est la <b>contrainte qui lie</b>. Un RE
+  à 2 couches plafonne au niveau de la représentation du PP à sa propre couche 2 — la distillation
+  ne peut pas faire tenir dans 2 couches ce qui a besoin de 4. Sous bruit, la hiérarchie des deux
+  profondeurs est confirmée par la grille : le RE 4 couches bat le RE 2 couches dans <b>15 cellules
+  sur 15</b>.</caption>
+</table>
+</div>
+
+<div class="prose">
+  <h3>11.5 · La variabilité des graines, et le taux d'effondrement</h3>
+  <p>Le chiffre publié antérieurement (0,3221 ± 0,0015) reposait sur <b>4 graines saines sur 5</b>.
+  Une campagne à <b>20 graines</b> a été menée pour donner le taux d'échec, condition
+  rédhibitoire pour toute publication.</p>
+</div>
+
+<figure>
+  <p class="figtitle">Vingt graines de sonde, trois modèles</p>
+  <p class="figsub">Chaque point est une tête CTC entraînée de bout en bout sur l'encodeur gelé.
+  Les points à droite de la ligne pointillée sont des têtes <b>effondrées</b> — muettes, au niveau
+  du hasard.</p>
+  <div id="ch-seeds"></div>
+  <figcaption>Le RE livré est à la fois <b>le meilleur</b> et <b>le plus fiable</b> des trois :
+  0,3307 ± 0,0105 sur les 19 graines saines, avec <b>1 effondrement sur 20 (5 %)</b>, contre 20 %
+  pour Run A et 25 % pour Run B. Le chiffre honnête à retenir pour le modèle livré est donc
+  <b>0,3307 ± 0,0105</b> — le 0,3221 ± 0,0015 antérieur était optimiste.</figcaption>
+</figure>
+
+<div class="prose">
+  <div class="box limite">
+    <p class="lab">Le point réellement bloquant pour un déploiement</p>
+    <p><b>Aucun détecteur d'effondrement n'est branché.</b> Le modèle livré produit une tête muette
+    une fois sur vingt <b>sans lever d'alerte</b> : le moniteur ne surveille que l'échelle, et la
+    sonde de fin de run moyenne sur les graines. Deux détecteurs ont été <b>validés</b> le 18 août
+    — le <b>κ de Cohen hors trames blanches</b> (négatif ⇒ effondrement) et le <b>nombre de
+    symboles distincts</b> (&lt; 20 ⇒ effondrement) — et ils vivent dans
+    <code>eval/diag_kappa_contenu.py</code>, <b>mais ils ne sont appelés nulle part</b>. Sur la
+    graine effondrée de validation, κ hors blanc vaut <b>−0,203</b> et le nombre de symboles
+    distincts tombe à <b>13</b>, contre 0,30 et 34–35 pour les graines saines : le détecteur
+    fonctionne, il n'est pas câblé. <b>Une tête effondrée en production est une panne totale et
+    silencieuse.</b></p>
+  </div>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 12 ══════════════════ -->
+<section id="s12">
+<div class="prose">
+  <span class="secnum">§ 12</span>
+  <h2 class="sec">Les interactions internes : ce que chaque étage fait au suivant</h2>
+  <p class="standfirst">Le dossier ne se contente pas de mesurer la sortie. Chaque étage interne a
+  été sondé avec le <i>même</i> instrument — et les résultats sont moins flatteurs que la sortie
+  finale. Ils sont donnés tels quels.</p>
+
+  <h3>12.1 · L'effet des professeurs assistants sur le professeur principal</h3>
+  <p>La Phase 1 fabrique une cible (l'Agrégation I) ; la Phase 2 tire le PP vers elle. Deux
+  questions se posent alors : <b>le PP suit-il sa cible ?</b> et <b>cette cible est-elle
+  bonne ?</b></p>
+  <p><b>Il la suit à 97 %.</b> Le suivi mesuré entre la cible et le PP après Phase 2 vaut 0,97 :
+  la Phase 2 ne corrige pas sa cible, elle la <b>reproduit</b>. Ce qui déplace la question sur la
+  qualité de la cible — et là, la mesure est sévère :</p>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Étage sondé</th><th class="num">PER</th><th class="num">WavLM public,<br>même couche</th><th class="num">Écart</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr><td><code>AggI</code> T6 — la cible fabriquée par la Phase 1</td><td class="num">0,2833</td><td class="num">0,2621</td><td class="num">+0,021</td><td><span class="chip no">dégrade</span></td></tr>
+    <tr><td><code>AggI</code> T8</td><td class="num">0,2730</td><td class="num">0,2631</td><td class="num">+0,010</td><td><span class="chip no">dégrade</span></td></tr>
+    <tr><td><code>AggI</code> T12</td><td class="num">0,3941</td><td class="num">0,2831</td><td class="num">+0,111</td><td><span class="chip no">dégrade</span></td></tr>
+    <tr><td>PP couche 4 — après Phase 2</td><td class="num">0,3765</td><td class="num">0,3130</td><td class="num">+0,064</td><td><span class="chip no">dégrade</span></td></tr>
+    <tr><td>PP couche 6</td><td class="num">0,2995</td><td class="num">0,2621</td><td class="num">+0,037</td><td><span class="chip no">dégrade</span></td></tr>
+    <tr><td>PP couche 8</td><td class="num">0,3012</td><td class="num">0,2631</td><td class="num">+0,038</td><td><span class="chip no">dégrade</span></td></tr>
+    <tr><td>PP couche 12</td><td class="num">0,3510</td><td class="num">0,2831</td><td class="num">+0,068</td><td><span class="chip no">dégrade</span></td></tr>
+    <tr class="hi"><td><b>RE</b> — le livrable, sur parole propre</td><td class="num">0,3445</td><td class="num">0,3190</td><td class="num">+0,026</td><td><span class="chip no">dégrade</span></td></tr>
+  </tbody>
+  <caption>Mesures sur audio <b>propre</b>, table de référence corrigée du 15 août.</caption>
+</table>
+</div>
+<div class="prose">
+  <div class="box limite">
+    <p class="lab">Le constat le plus inconfortable du dossier — et il est assumé</p>
+    <p><b>Sur parole propre, tout l'échafaudage dégrade la représentation par rapport au WavLM
+    pris sur étagère.</b> Aucun étage n'ajoute de contenu : ni l'agrégation des assistants, ni la
+    Phase 2, ni la distillation. C'est le prix de l'invariance — et le § 11 montre que ce prix
+    achète quelque chose de réel sous bruit. Mais cela signifie que la machinerie à trois
+    professeurs <b>n'est justifiée que par le gain d'invariance final</b>, jamais par un
+    enrichissement intermédiaire.</p>
+  </div>
+
+  <h3>12.2 · L'effet du PP et des PA sur le RE : les ablations de canal</h3>
+  <p>Chaque canal de distillation a été coupé isolément, sur un contrôle à facteur unique.
+  <code>total_loss</code> ignore toute composante absente : couper un canal se fait donc en
+  retirant sa clé, sans toucher à la perte.</p>
+</div>
+
+<figure>
+  <p class="figtitle">Contribution nette de chaque composant, mesurée par ablation</p>
+  <p class="figsub">Écart de PER par rapport au contrôle M3a (0,4547). Vers la gauche =
+  la modification <b>améliore</b> ; vers la droite = elle dégrade.</p>
+  <div id="ch-abl"></div>
+  <figcaption>Deux enseignements. <b>ℒ_PE est indispensable</b> (la couper coûte +0,0111) :
+  la distillation verticale fait bien mieux que la seule copie de poids initiale.
+  <b>ℒ_PAE ne sert à rien</b> (+0,0002) alors qu'elle porte le poids le plus élevé de toute la
+  perte (γ = 2,0) — mesuré à l'entrée de la Phase 3 : cos(PP@T12, AggII) = 0,952, le canal latéral
+  est redondant à 95 % avec l'un des trois taps du canal vertical. Et <b>dégeler les PA détruit
+  tout</b> : PER 0,9782, pire que le hasard.</figcaption>
+</figure>
+
+<div class="prose">
+  <h3>12.3 · Les gains cumulés du projet, dans l'ordre de leur ampleur</h3>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th class="num">#</th><th>Correction</th><th class="num">Gain de PER</th><th>Protocole</th></tr></thead>
+  <tbody>
+    <tr class="hi"><td class="num">1</td><td><b><code>re_layers</code> 2 → 4</b></td><td class="num"><b>−0,0997</b></td><td>facteur unique, IC₉₅ disjoints</td></tr>
+    <tr><td class="num">2</td><td>Corpus 9,7 h → 65,7 h, 28 → 2 340 locuteurs</td><td class="num">−0,0418</td><td>facteur unique, IC₉₅ disjoints</td></tr>
+    <tr><td class="num">3</td><td>Sélection du meilleur PP (M3b)</td><td class="num">−0,0096</td><td>5 graines</td></tr>
+    <tr><td class="num">4</td><td>Masquage du PP coupé en Phase 3 (M5)</td><td class="num">−0,0059</td><td>t = −6,33, 5/5 graines saines</td></tr>
+    <tr><td colspan="4"><b>Trajectoire d'ensemble : 0,4573 → 0,3221, soit −0,135</b> — puis 0,3307 ± 0,0105 en lecture honnête à 20 graines.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="prose">
+  <h3>12.4 · Le dispositif est surdimensionné — chiffré</h3>
+  <p>Trois professeurs assistants coûtent <b>286,7 M de paramètres, soit 68 % de la mémoire</b>.
+  Que rapportent-ils <i>statistiquement</i> ? La grandeur qui répond est le nombre effectif de
+  professeurs :</p>
+  <div class="eq">M_eff  =  M / [ 1 + (M − 1)·ρ ]        ρ = corrélation moyenne entre professeurs</div>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>État mesuré</th><th class="num">ρ</th><th class="num">M_eff (M = 3)</th><th>Lecture</th></tr></thead>
+  <tbody>
+    <tr><td>à l'initialisation, SNR couplés ± 3 dB</td><td class="num">0,277</td><td class="num">1,93</td><td>les PA partagent la même initialisation, la donnée seule les sépare</td></tr>
+    <tr class="hi"><td><b>après la Phase 1</b></td><td class="num"><b>0,520</b></td><td class="num"><b>1,45</b></td><td><b>la Phase 1 <i>dégrade</i> la diversité</b> qu'elle est censée exploiter</td></tr>
+    <tr><td>SNR découplés — contrefactuel</td><td class="num">0,109</td><td class="num">2,44</td><td>la mesure va <b>contre</b> le motif invoqué pour <code>snr_couple_delta</code></td></tr>
+    <tr><td>bruits totalement indépendants — contrefactuel</td><td class="num">−0,02</td><td class="num">3,15</td><td>borne haute théorique</td></tr>
+  </tbody>
+  <caption>À ρ = 0,52, le plafond <code>1/ρ</code> vaut 1,92 <b>même à M = ∞</b> : ajouter des
+  professeurs ne peut plus rien acheter. <b>Trois professeurs se comportent comme 1,45.</b></caption>
+</table>
+</div>
+<div class="prose">
+  <div class="box limite">
+    <p class="lab">Trois questions ouvertes que cette mesure impose</p>
+    <p>1 · <b>M = 3 sert-il ?</b> Aucune ablation M = 1 vs M = 3 n'a été faite — 286,7 M de
+    paramètres reposent sur un choix non testé.<br>
+    2 · <b>La Phase 1 sert-elle ?</b> Elle consomme 19 800 pas et fait <i>baisser</i> M_eff de 1,93
+    à 1,45. Un run à <code>--p1 0</code> (≈ 3,2 h) trancherait.<br>
+    3 · <b>Le couplage des SNR est-il justifié ?</b> La seule mesure mécanique disponible le
+    contredit. Le paramètre n'est pas seulement non soutenu : il est <b>contre-indiqué</b> par la
+    mesure — sans qu'aucun test en tâche ne l'ait tranché.</p>
+  </div>
+
+  <h3>12.5 · L'effet du budget d'entraînement de la sonde</h3>
+  <p>Le PER absolu du dossier (0,457 au budget de référence de l'époque) a été contesté en interne
+  comme « trop élevé face aux 4,84 % publiés pour un modèle complet ». La question a été
+  décomposée : <b>quelle part est un artefact de budget, quelle part est une propriété du
+  modèle ?</b></p>
+</div>
+
+<figure>
+  <p class="figtitle">Le PER en fonction du budget d'entraînement de la sonde</p>
+  <p class="figsub">Même encodeur gelé, seul le budget de la tête linéaire change. La référence
+  MFCC est mesurée au même budget à chaque point.</p>
+  <div id="ch-budget"></div>
+  <figcaption>Passer du budget de travail (2 000 énoncés × 15 époques) au budget du protocole
+  international (14 404 × 34) fait descendre le PER de <b>0,453 à 0,376</b> : <b>une part réelle
+  du chiffre était un artefact de budget</b>. Mais la courbe s'aplatit — le reste est une propriété
+  du modèle, et l'écart avec la MFCC, lui, <b>s'élargit</b> de 0,427 à 0,533 : plus la sonde a de
+  budget, plus la supériorité de la représentation apprise se voit. Le budget de travail est donc
+  <b>conservateur</b>, jamais flatteur.</figcaption>
+</figure>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 13 ══════════════════ -->
+<section id="s13">
+<div class="prose">
+  <span class="secnum">§ 13</span>
+  <h2 class="sec">Le système RAP : de la représentation à la commande exécutée</h2>
+  <p class="standfirst">Une sonde répond à « cette représentation <i>contient</i>-elle de
+  l'information ? ». C'est un bon instrument d'analyse et un mauvais substitut à une question
+  d'usage. Le RAP — reconnaissance à vocabulaire fermé — pose la vraie question :
+  <b>le robot comprend-il la commande ?</b></p>
+</div>
+
+<figure>
+  <p class="figtitle">La chaîne de reconnaissance, telle qu'elle est câblée dans le robot</p>
+  <p class="figsub">Le RAP s'insère entre le VAD et l'ASR généraliste ; un refus est un succès,
+  pas une panne.</p>
+  <div class="svgscroll">
+  <svg viewBox="0 0 1000 300" role="img" aria-label="Chaîne : micro, détection de parole, encodeur RE gelé, tête CTC, décodage par faisceau, distance d'édition aux 22 références, puis décision d'acceptation ou repli sur Gemini.">
+    <defs>
+      <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+      </marker>
+      <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#12507F"/>
+      </marker>
+    </defs>
+    <g font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor">
+      <rect x="12" y="60" width="104" height="46" rx="3" fill="none" stroke="currentColor"/>
+      <text x="64" y="80" text-anchor="middle">micro</text>
+      <text x="64" y="95" text-anchor="middle" font-size="9.5" fill="#68757F">16 kHz</text>
+      <line x1="116" y1="83" x2="146" y2="83" stroke="currentColor" marker-end="url(#ar3)"/>
+
+      <rect x="146" y="60" width="112" height="46" rx="3" fill="none" stroke="currentColor"/>
+      <text x="202" y="80" text-anchor="middle">VAD Silero</text>
+      <text x="202" y="95" text-anchor="middle" font-size="9.5" fill="#68757F">segmente l'énoncé</text>
+      <line x1="258" y1="83" x2="288" y2="83" stroke="currentColor" marker-end="url(#ar3)"/>
+
+      <rect x="288" y="52" width="136" height="62" rx="3" fill="none" stroke="#12507F" stroke-width="1.6"/>
+      <text x="356" y="72" text-anchor="middle" fill="#12507F">RE GELÉ · 4 couches</text>
+      <text x="356" y="88" text-anchor="middle" font-size="9" fill="#12507F">models_best · le livrable</text>
+      <text x="356" y="104" text-anchor="middle" font-size="9.5">→ (T, 768)</text>
+      <line x1="424" y1="83" x2="454" y2="83" stroke="#12507F" marker-end="url(#ar4)"/>
+
+      <rect x="454" y="60" width="120" height="46" rx="3" fill="none" stroke="currentColor"/>
+      <text x="514" y="80" text-anchor="middle">tête CTC</text>
+      <text x="514" y="95" text-anchor="middle" font-size="9.5" fill="#68757F">linéaire · 43 classes</text>
+      <line x1="574" y1="83" x2="604" y2="83" stroke="currentColor" marker-end="url(#ar3)"/>
+
+      <rect x="604" y="60" width="126" height="46" rx="3" fill="none" stroke="currentColor"/>
+      <text x="667" y="80" text-anchor="middle">faisceau (8)</text>
+      <text x="667" y="95" text-anchor="middle" font-size="9.5" fill="#68757F">→ suite de phonèmes</text>
+      <line x1="730" y1="83" x2="760" y2="83" stroke="currentColor" marker-end="url(#ar3)"/>
+
+      <rect x="760" y="52" width="228" height="62" rx="3" fill="none" stroke="currentColor"/>
+      <text x="874" y="72" text-anchor="middle" font-size="10.5">distance d'édition aux 22 références</text>
+      <text x="874" y="90" text-anchor="middle" font-size="9.5" fill="#68757F">d₁ = meilleure · d₂ = deuxième</text>
+      <text x="874" y="106" text-anchor="middle" font-size="9.5" fill="#68757F">gabarits canoniques + empiriques</text>
+
+      <!-- décision -->
+      <line x1="874" y1="114" x2="874" y2="146" stroke="currentColor" marker-end="url(#ar3)"/>
+      <rect x="700" y="146" width="288" height="48" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="844" y="166" text-anchor="middle" font-size="11">d₁ ≤ 0,55   ET   (d₂ − d₁) ≥ 0,12 ?</text>
+      <text x="844" y="184" text-anchor="middle" font-size="9.5" fill="#68757F">la confiance est une MARGE, pas une distance</text>
+
+      <path d="M700 170 L620 170 L620 236" stroke="currentColor" fill="none" marker-end="url(#ar3)"/>
+      <text x="628" y="206" font-size="10">non</text>
+      <path d="M988 170 L1000 170" stroke="currentColor" fill="none" opacity="0"/>
+      <path d="M844 194 L844 236" stroke="#12507F" fill="none" marker-end="url(#ar4)"/>
+      <text x="852" y="216" font-size="10" fill="#12507F">oui</text>
+
+      <rect x="700" y="236" width="288" height="44" rx="3" fill="#12507F" fill-opacity=".08" stroke="#12507F"/>
+      <text x="844" y="256" text-anchor="middle" font-size="10.5" fill="#12507F">commande acceptée → exécutée par le robot</text>
+      <text x="844" y="272" text-anchor="middle" font-size="9.5" fill="#12507F">0 % de fausse acceptation sur 260 décisions</text>
+
+      <rect x="430" y="236" width="240" height="44" rx="3" fill="none" stroke="currentColor" stroke-dasharray="4 3"/>
+      <text x="550" y="256" text-anchor="middle" font-size="10.5">refus → repli sur Gemini (audio brut)</text>
+      <text x="550" y="272" text-anchor="middle" font-size="9.5" fill="#68757F">exactement le pipeline d'avant</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption>Pourquoi l'ensemble fermé change tout : le RE a un PER de ~0,28, une transcription
+  libre serait inutilisable. Mais choisir parmi 22 énoncés connus est un problème bien plus facile
+  — il suffit que la bonne référence soit <i>plus proche</i> que les 21 autres. Et pourquoi la
+  confiance est une marge : à PER 0,28, la distance à la <b>bonne</b> référence vaut ~0,28 de toute
+  façon ; ce qui distingue une reconnaissance sûre d'un hasard heureux est l'écart au second
+  candidat.</figcaption>
+</figure>
+
+<div class="prose">
+  <h3>13.1 · Le résultat sur la tâche réelle</h3>
+  <p>Français, 5 énoncés × 5 réalisations de bruit par SNR, bruit urbain simulé
+  <b>jamais vu à l'entraînement</b>. La colonne qui compte est « accepté <i>et</i> juste » : la
+  décision a été prise <b>et</b> elle était correcte.</p>
+</div>
+
+<figure>
+  <p class="figtitle">Commandes reconnues, acceptées et justes — le RE contre son initialisation</p>
+  <p class="figsub">Même tête CTC, même chaîne, même bruit. Seul l'encodeur change.</p>
+  <div class="legend" id="lg-rap"></div>
+  <div id="ch-rap"></div>
+  <figcaption>Le gain est concentré entre +5 et 0 dB — exactement la zone où la sonde le situe
+  aussi. À 0 dB, le RE comprend <b>76 %</b> des commandes contre <b>36 %</b> pour son
+  initialisation. <b>Zéro fausse acceptation</b> sur les 260 décisions, pour les deux encodeurs :
+  le système ne se trompe jamais de commande — quand il ne sait pas, il refuse.</figcaption>
+</figure>
+
+<div class="tw">
+<table>
+  <thead><tr><th>SNR</th><th class="num">n</th><th class="num">RE rang-1</th><th class="num">RE juste</th><th class="num">Init rang-1</th><th class="num">Init juste</th><th class="num">Écart</th><th class="num">Fausse acc.</th></tr></thead>
+  <tbody>
+    <tr><td>propre</td><td class="num">5</td><td class="num">100 %</td><td class="num"><b>100 %</b></td><td class="num">100 %</td><td class="num">100 %</td><td class="num">+0 pts</td><td class="num">0 %</td></tr>
+    <tr><td>+15 dB</td><td class="num">25</td><td class="num">100 %</td><td class="num"><b>100 %</b></td><td class="num">100 %</td><td class="num">100 %</td><td class="num">+0 pts</td><td class="num">0 %</td></tr>
+    <tr><td>+10 dB</td><td class="num">25</td><td class="num">100 %</td><td class="num"><b>100 %</b></td><td class="num">100 %</td><td class="num">96 %</td><td class="num">+4 pts</td><td class="num">0 %</td></tr>
+    <tr><td>+5 dB</td><td class="num">25</td><td class="num">100 %</td><td class="num"><b>96 %</b></td><td class="num">100 %</td><td class="num">72 %</td><td class="num">+24 pts</td><td class="num">0 %</td></tr>
+    <tr class="hi"><td><b>0 dB</b></td><td class="num">25</td><td class="num">96 %</td><td class="num"><b>76 %</b></td><td class="num">96 %</td><td class="num">36 %</td><td class="num"><b>+40 pts</b></td><td class="num">0 %</td></tr>
+    <tr><td>−5 dB</td><td class="num">25</td><td class="num">80 %</td><td class="num">28 %</td><td class="num">52 %</td><td class="num">12 %</td><td class="num">+16 pts</td><td class="num">0 %</td></tr>
+    <tr class="hi"><td><b>bande entière</b></td><td class="num">130</td><td class="num">95,4 %</td><td class="num"><b>80,8 %</b></td><td class="num">90,0 %</td><td class="num">64,6 %</td><td class="num"><b>+16,2 pts</b></td><td class="num"><b>0 %</b></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="prose">
+  <div class="box mesure">
+    <p class="lab">Le fait le plus instructif du dossier : la sonde et la tâche ne classent pas pareil</p>
+    <p>PER de la tête sur audio propre : <b>RE 0,2788</b> contre <b>WavLM c4 0,2732</b>.
+    <b>L'initialisation a un PER légèrement <i>meilleur</i> — et perd la tâche de 16 points.</b></p>
+    <p style="margin-top:9px">Ce n'est pas une contradiction, c'est une leçon sur l'instrument :
+    le PER est mesuré sur du français conversationnel <b>propre</b>, la tâche est mesurée
+    <b>sous bruit</b>. Une sonde qui classe deux encodeurs sur audio propre ne dit rien de leur
+    ordre sous bruit. <b>Conséquence pratique : le PER seul ne suffit pas à choisir un
+    encodeur</b> — il faut au moins une tâche aval, de préférence dans le régime de bruit visé.</p>
+  </div>
+
+  <h3>13.2 · L'effet dans la chaîne réelle du robot</h3>
+  <p>Le RAP est mesuré <b>derrière le VAD</b>, aux paramètres exacts de <code>voice_agent.py</code>.
+  La métrique est le WER du <b>texte qui parvient à l'agent</b> — le seul chiffre qui décide si le
+  robot exécute la bonne action.</p>
+</div>
+
+<figure>
+  <p class="figtitle">WER du texte reçu par l'agent, avant et après l'ajout de models_best</p>
+  <p class="figsub">Avant : audio → VAD → Gemini. Après : audio → VAD → RAP, avec repli sur Gemini
+  si le RAP refuse. Mêmes fichiers, même normalisation.</p>
+  <div class="legend" id="lg-wer"></div>
+  <div id="ch-wer"></div>
+  <figcaption>Sur la bande entière (n = 90) : <b>WER 0,251 → 0,186</b>. À +5, +10 et +15 dB, le WER
+  tombe à <b>zéro</b> — le RAP accepte 15 fois sur 15 et la référence exacte est transmise. À 0 dB,
+  <b>0,131 → 0,038</b>. À −10 dB le RAP ne prend plus la main (VAD ou seuils) et la chaîne se
+  comporte exactement comme avant : <b>l'ajout ne dégrade jamais</b>.</figcaption>
+</figure>
+
+<div class="prose">
+  <h3>13.3 · Et si l'on enlevait le RAP ? — l'ablation d'architecture</h3>
+  <p>Trois architectures, mêmes fichiers, même métrique. La variante C remplace la liste fermée par
+  une transcription phonémique libre envoyée à Gemini.</p>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Architecture</th><th class="num">−5 dB</th><th class="num">0 dB</th><th class="num">+5 dB</th><th class="num">+10 dB</th><th class="num">+15 dB</th></tr></thead>
+  <tbody>
+    <tr><td><b>A</b> · Gemini seul sur l'audio <span class="u">— le pipeline d'avant</span></td><td class="num">0,377</td><td class="num">0,131</td><td class="num">0,083</td><td class="num">0,050</td><td class="num">0,100</td></tr>
+    <tr class="hi"><td><b>B</b> · RAP + repli Gemini <span class="u">— ce qui est branché</span></td><td class="num"><b>0,327</b></td><td class="num"><b>0,038</b></td><td class="num"><b>0,000</b></td><td class="num"><b>0,000</b></td><td class="num"><b>0,000</b></td></tr>
+    <tr><td><b>C</b> · phonèmes → Gemini, sans liste fermée</td><td class="num">1,040</td><td class="num">0,658</td><td class="num">0,425</td><td class="num">0,251</td><td class="num">0,202</td></tr>
+  </tbody>
+  <caption>La variante C est <b>massivement pire</b> partout. Ce n'est pas un échec de
+  l'encodeur : c'est la démonstration que <b>l'ensemble fermé est la condition d'utilisabilité</b>
+  d'une représentation à PER 0,28. Le taux de prise en charge par le RAP dans la variante B monte
+  de 33 % à −5 dB jusqu'à 100 % dès +5 dB.</caption>
+</table>
+</div>
+
+<div class="prose">
+  <h3>13.4 · Les limites du RAP, déclarées</h3>
+  <ul>
+    <li><b>10 des 22 références sont testées</b> — seules dix commandes ont de l'audio. Le choix se
+    fait bien parmi 22 candidates, mais les distracteurs non testés ne sont jamais prononcés.</li>
+    <li><b>Une seule voix de synthèse.</b> Rien n'établit la généralisation à un locuteur nouveau.
+    <b>C'est la limite principale.</b></li>
+    <li><b>Les 5 commandes anglaises échouent</b> — 14,6 % contre 80,8 % en français. Le
+    vocabulaire phonémique est français : les phonèmes propres à l'anglais (ð, θ, ɹ, æ) en sont
+    absents et sont <i>retirés</i>, avec 33 à 46 % de perte. Limite <b>structurelle</b>, pas un
+    défaut de l'encodeur — et une décision qui n'a pas été prise : retirer l'anglais du périmètre,
+    ou construire un vocabulaire bilingue (ce qui invaliderait tous les PER publiés).</li>
+    <li><b>Bruit urbain simulé</b>, pas le bruit de l'atelier. Les deux encodeurs le subissent
+    identiquement, mais l'absolu n'est pas transposable.</li>
+    <li><b>Seuils fixés a priori</b> (0,55 / 0,12), non optimisés. L'écart rang-1 / juste est
+    parlant : à −5 dB le RE <i>trouve</i> la bonne commande 80 % du temps mais n'ose l'accepter que
+    28 % du temps. <b>Les trois quarts de la perte à ce SNR viennent du seuil, pas de la
+    représentation</b> — et un seuil se règle sans réentraîner quoi que ce soit.</li>
+  </ul>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 14 ══════════════════ -->
+<section id="s14">
+<div class="prose">
+  <span class="secnum">§ 14</span>
+  <h2 class="sec">Coût d'inférence et déploiement</h2>
+  <p class="standfirst">C'est le seul volet du projet qui soit entièrement réglé.</p>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Grandeur</th><th class="num">RE 2 couches</th><th class="num">RE 4 couches — déployé</th></tr></thead>
+  <tbody>
+    <tr><td>paramètres <b>déployables</b> (encodeur + tête CTC)</td><td class="num">23,53 M</td><td class="num"><b>37,71 M</b></td></tr>
+    <tr><td>paramètres totaux du checkpoint</td><td class="num">28,30 M</td><td class="num">42,48 M</td></tr>
+    <tr><td><span class="u">dont têtes TPE — entraînement seul, jamais déployées</span></td><td class="num"><span class="u">4,72 M</span></td><td class="num"><span class="u">4,72 M</span></td></tr>
+    <tr><td>poids fp32 / fp16</td><td class="num">94,1 / 47,1 Mo</td><td class="num">150,8 / 75,4 Mo</td></tr>
+    <tr class="hi"><td><b>CPU</b> — 3 s d'audio</td><td class="num">35,5 ms · RTF 0,0118</td><td class="num"><b>37,9 ms · RTF 0,0126</b></td></tr>
+    <tr><td><b>GPU</b> (RTX 4090) — 3 s d'audio</td><td class="num">2,3 ms · RTF 0,0008</td><td class="num">2,8 ms · RTF 0,0009</td></tr>
+  </tbody>
+  <caption>RTF 0,012 sur CPU = <b>~80 × plus rapide que le temps réel</b>, en float32, sans
+  quantification, sans GPU. La latence perçue sera dominée par le VAD, pas par le modèle. Le
+  traitement est <b>par énoncé</b>, pas en flux — le bon choix : le VAD segmente déjà, une commande
+  dure 2–3 s, et le décodage CTC a besoin de la séquence entière. Réserve : mesure faite sur le CPU
+  de la machine de développement ; un PC industriel plus modeste garde un facteur ~80 de marge.</caption>
+</table>
+</div>
+<div class="prose">
+  <p>L'étage est <b>déjà câblé</b> dans l'agent vocal du robot (<code>rap_local.py</code>, activé
+  par <code>USE_RAP=1</code>), entre le VAD et Gemini. Ce qui reste avant une mise en service n'est
+  donc pas de l'implémentation — c'est de la donnée et une décision (§ 15).</p>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 15 ══════════════════ -->
+<section id="s15">
+<div class="prose">
+  <span class="secnum">§ 15</span>
+  <h2 class="sec">Les limites — toutes, y compris celles qui gênent</h2>
+  <p class="standfirst">Cette section n'est pas une précaution de style. Le projet s'est doté
+  d'instruments qui ont attrapé ses propres erreurs, et il a réfuté trois de ses propres thèses
+  quand les données l'ont exigé. Ce qui suit est le reste de ce qu'elles disent.</p>
+
+  <h3>15.1 · Ce qui bloque une mise en service industrielle</h3>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th class="num">#</th><th>Limite</th><th>Ce qui est mesuré</th><th>Nature</th></tr></thead>
+  <tbody>
+    <tr><td class="num">1</td><td><b>Aucun détecteur d'effondrement n'est branché</b></td><td>1 tête sur 20 est muette, sans alerte. Les deux détecteurs sont validés (κ hors blanc = −0,203 ; 13 symboles distincts contre 34) mais appelés nulle part</td><td><span class="chip no">bloquant</span> <span class="u">code, ~1 h</span></td></tr>
+    <tr><td class="num">2</td><td><b>Le régime cible est absent de l'entraînement</b></td><td><b>0,0 %</b> des exemples d'entraînement sont dans −25..−10 dB, sur 200 items du chargeur réel. Le SNR minimum vécu est −7,96 dB en région active. À −10 dB le PER est déjà à 0,92–0,97 ; à −20 dB les deux modèles sont au plancher</td><td><span class="chip no">bloquant</span> <span class="u">mesure de terrain</span></td></tr>
+    <tr><td class="num">3</td><td><b>Le bruit d'atelier est un jeton</b></td><td>6 fichiers, <b>111,9 s</b>, évaluation seulement. Une cellule de grille consomme ~1 000 s : chaque fichier est réutilisé ~9 fois. L'IC des cellules <code>atelier</code> mesure la variance <i>des graines</i>, presque pas celle des conditions d'atelier</td><td><span class="chip no">acquisition</span></td></tr>
+    <tr><td class="num">4</td><td><b>Une seule voix pour les commandes</b></td><td>10 fichiers, une voix TTS, les mêmes en apprentissage et en test de la tête. Aucune affirmation de généralisation à un opérateur n'est possible</td><td><span class="chip no">acquisition</span></td></tr>
+    <tr><td class="num">5</td><td><b>La langue n'est pas tranchée</b></td><td>Entraînement mixte, sonde française, déploiement à 22 commandes dont 5 anglaises qui plafonnent à 14,6 %. Le dépôt <i>contourne</i> (<code>RAP_LANGUES=fr</code>) sans décider</td><td><span class="chip wr">décision</span></td></tr>
+    <tr><td class="num">6</td><td>Validation bout-en-bout VAD → RAP → KUKA chronométrée</td><td>non faite sur commandes réelles prononcées par des opérateurs</td><td><span class="chip wr">intégration</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="prose">
+  <div class="box limite">
+    <p class="lab">La limite qui décide de tout</p>
+    <p><b>Ce projet n'est pas limité par son code. Il est limité par le fait qu'aucune des deux
+    données qui décident du déploiement — le bruit de la cellule et la voix des opérateurs — n'a
+    été acquise, alors que tout le reste les attend.</b> <code>snr_range</code> déclare lui-même
+    dépendre d'une mesure de terrain non faite ; <code>noise_pool.py</code> a préparé la famille
+    vide pour la recevoir ; l'outillage d'ingestion existe. Une journée de mesure dB(A) dans la
+    cellule et deux heures d'enregistrement du servo KUKA changent <b>toutes</b> les priorités du
+    dossier — car elles disent si la cible est −18 dB (hors de portée aujourd'hui) ou +8 dB
+    (déjà atteinte).</p>
+  </div>
+
+  <h3>15.2 · Ce qui limite la portée scientifique</h3>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Limite</th><th>État</th><th>Ce qui manque exactement</th></tr></thead>
+  <tbody>
+    <tr><td><b>La baseline « plus simple » n'existe pas</b></td><td><span class="chip no">trou le plus grave</span></td><td>On a démontré que N2N+KD bat « ne rien faire » et bat une méthode publiée (DistilHuBERT). <b>On n'a jamais testé s'il bat « faire quelque chose de plus simple »</b> : WavLM affiné sur les mêmes données bruitées avec sa propre tâche de masquage, ou une simple augmentation par le bruit sans professeurs ni distillation. <b>Tant que ce n'est pas mesuré, l'attribution du gain à la méthode plutôt qu'à « avoir vu du bruit à l'entraînement » n'est pas établie.</b> Coût : ~5 h par run</td></tr>
+    <tr><td><b>MULTINOISE — la correction fondatrice</b></td><td><span class="chip nt">non tranché</span></td><td>Ablation à facteur unique menée : 0,4573 contre 0,4601, <b>IC chevauchants</b>. Aucun gain mesurable en reconnaissance. La justification mathématique est intacte, l'empirique est absente — et le M_eff de 1,45 l'explique mécaniquement</td></tr>
+    <tr><td><b>M = 3 n'a jamais été ablé</b></td><td><span class="chip no">non mesuré</span></td><td>286,7 M de paramètres, 68 % de la mémoire, sur un choix non testé. 2 runs, ~7 h</td></tr>
+    <tr><td><b>La Phase 1 n'a jamais été ablée</b></td><td><span class="chip no">non mesuré</span></td><td>19 800 pas, et elle fait <i>baisser</i> M_eff de 1,93 à 1,45. Un run à <code>--p1 0</code>, ~3,2 h</td></tr>
+    <tr><td><b>Le facteur <code>taps</code> n'est pas isolé</b></td><td><span class="chip wr">déclaré</span></td><td>Le passage de (4,8,12) à (6,8,12) n'a jamais été testé seul, et sa justification dans <code>train.py</code> <b>cite une mesure depuis réfutée</b></td></tr>
+    <tr><td><b>Niveau absolu du PER</b></td><td><span class="chip wr">limite déclarée</span></td><td>0,33 au budget de travail, 0,376 au budget du protocole international, contre 4,84 % publié pour un modèle <i>complet</i>. Ce travail établit un <b>écart entre méthodes</b>, pas une performance absolue compétitive</td></tr>
+    <tr><td><b>Aucun banc standard</b></td><td><span class="chip no">absent</span></td><td>« SUPERB » est cité comme <i>protocole</i>, mais aucune tâche SUPERB n'est implémentée ; le PER est calculé sur un corpus FR phonémisé maison, comparable à aucune table publiée. Coût : jours</td></tr>
+    <tr><td><b>Budgets de pré-entraînement non égalisables</b></td><td><span class="chip wr">à déclarer</span></td><td>Le RE hérite de WavLM Base+ (94 000 h) puis 65,7 h ; DistilHuBERT hérite de HuBERT (960 h). <b>Non égalisable</b> — donc à déclarer dans toute table publiée, jamais à masquer</td></tr>
+    <tr><td><b>Effet de plancher dans l'inversion</b></td><td><span class="chip wr">confondant déclaré</span></td><td>WavLM part de plus bas au propre et a donc plus de marge pour chuter. Limité — non annulé — par le fait qu'à 0 et −5 dB aucun n'est saturé. L'isoler demande un protocole dédié, <b>non fait</b></td></tr>
+    <tr><td><b>RIR simulées</b></td><td><span class="chip wr">repli assumé</span></td><td>ISM par sources-images ; aucun corpus de RIR mesurées n'est disponible localement. Le point d'entrée est prêt</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="prose">
+  <h3>15.3 · Hygiène du dépôt</h3>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Point</th><th>État</th></tr></thead>
+  <tbody>
+    <tr><td>Contrôle de version</td><td><b>Le dépôt est hors contrôle de version depuis le 5 août</b> — 73 fichiers non suivis, registre de décisions arrêté à D-051. <b>Rien n'est reproductible en l'état sans ce dossier.</b> Coût de la correction : 1 h</td></tr>
+    <tr><td><code>config.json</code> du run livré</td><td><b>Faux</b> sur les budgets de phases (§ 1.3). À corriger ou à faire pointer vers le manifeste</td></tr>
+    <tr><td>Paramètres morts</td><td>8 champs de configuration ne pilotent rien, dont <code>selection_metric</code> (assertion seule) et <code>pa_warmup_epochs</code>, pourtant déclaré « décisif »</td></tr>
+    <tr><td>Volume</td><td>34 runs, <b>187,5 Go</b>, 92 fichiers Python dont <b>23 seulement</b> sont sur le chemin critique (5 332 lignes sur 14 719, soit 36 %). 11 runs « smoke » (39 Go) sont sans valeur scientifique. Rien n'a été supprimé ; un manifeste déclare ce qui constitue le système livré</td></tr>
+    <tr><td>Pathologie de graine</td><td>Diagnostiquée et chiffrée le 18 août (5 % sur le modèle livré), mais <b>la cause racine reste inconnue</b> — l'effondrement est présent dès l'époque 1 et la sélection sur <code>dev</code> ne le rattrape pas</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 16 ══════════════════ -->
+<section id="s16">
+<div class="prose">
+  <span class="secnum">§ 16</span>
+  <h2 class="sec">Conclusion</h2>
+  <p class="standfirst">Le jugement, dimension par dimension, avec ce qui le soutient.</p>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Dimension</th><th>Verdict</th><th>Ce qui le soutient</th></tr></thead>
+  <tbody>
+    <tr><td><b>Objectif scientifique — l'invariance au bruit</b></td><td><span class="chip ok">atteint</span></td><td>1,78 × moins sensible au bruit que son initialisation, sur 15 cellules × 5 graines, instrument corrigé, conception appariée ; l'écart tient dans <b>15 cellules sur 15</b></td></tr>
+    <tr><td><b>Comparaison à une méthode publiée</b></td><td><span class="chip ok">atteint</span></td><td>bat <b>DistilHuBERT</b> dans <b>15 cellules sur 15</b> de la bande cible, à budget de sonde identique et encodeurs gelés</td></tr>
+    <tr><td><b>Utilité démontrée en aval</b></td><td><span class="chip ok">atteint</span></td><td>+16,2 points de commandes justes sur la tâche réelle, <b>0 % de fausse acceptation</b> ; WER de la chaîne robot 0,251 → 0,186</td></tr>
+    <tr><td><b>Rigueur méthodologique</b></td><td><span class="chip ok">exemplaire</span></td><td>critères pré-enregistrés honorés même contre l'hypothèse de départ ; règle des IC disjoints <i>dans les deux sens</i> ; <code>self_check</code> bloquant 97/97 ; 23 tests de non-régression ; quatre corrections d'instrument publiées, dont une qui a <b>renversé trois conclusions du dossier</b></td></tr>
+    <tr><td><b>Coût d'inférence</b></td><td><span class="chip ok">réglé</span></td><td>RTF 0,012 sur CPU, 151 Mo, ~80 × le temps réel</td></tr>
+    <tr><td><b>Efficacité du dispositif</b></td><td><span class="chip no">insuffisante</span></td><td>68 % de la mémoire pour un facteur statistique de 1,45 ; un canal de perte inutile porte le poids le plus fort ; le plus gros gain vient d'un entier (<code>re_layers</code>), pas de la méthode</td></tr>
+    <tr><td><b>Attribution du gain à la méthode</b></td><td><span class="chip no">non établie</span></td><td>aucune baseline « plus simple » testée — c'est le trou le plus grave, et il est réparable en un run de 5 h</td></tr>
+    <tr><td><b>Couverture du régime industriel</b></td><td><span class="chip no">non couverte</span></td><td>0 % de l'entraînement dans le régime cible annoncé ; à −20 dB tous les modèles sont au plancher</td></tr>
+    <tr><td><b>Reproductibilité</b></td><td><span class="chip wr">fragile</span></td><td>rien n'est commité ; le <code>config.json</code> du run livré est faux ; la pathologie de graine n'a pas de cause connue</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="prose">
+  <div class="box">
+    <p class="lab">La position défendable</p>
+    <p><b>Le projet a fait ce qu'il annonçait : produire une représentation robuste au bruit sans
+    jamais voir le signal propre.</b> Le gain est réel, large, mesuré proprement, et il ne
+    s'obtient pas gratuitement en changeant de couche WavLM — <code>WavLM_c6</code>, pourtant
+    meilleur au calme (0,2641), s'effondre lui aussi sous le bruit (0,8051 à 0 dB sur atelier,
+    mesure à l'instrument antérieur). Un facteur 1,78 sur la sensibilité au bruit, obtenu dans
+    15 cellules sur 15, pour 37,7 M de paramètres embarquables et un RTF de
+    0,012, est un résultat qui tient debout. Et depuis le 18 août, il est confirmé <b>sur la tâche
+    réelle</b> et <b>contre une méthode publiée</b>, ce qui n'était pas le cas au moment du bilan
+    du 15 août.</p>
+    <p style="margin-top:10px"><b>Ce que le dossier ne peut pas encore affirmer, c'est que ce soit
+    la bonne <i>façon</i> d'obtenir ce gain.</b> Trois professeurs assistants qui se comportent
+    comme 1,45, un canal de distillation qui n'apporte rien, et surtout aucune baseline simple :
+    il reste possible qu'une augmentation par le bruit bien faite obtienne l'essentiel du même
+    gain pour une fraction du coût. Tant que ce n'est pas mesuré, la contribution propre de la
+    méthode reste une hypothèse plausible, pas un résultat.</p>
+    <p style="margin-top:10px">La formulation honnête de l'Objectif 1 est donc celle-ci :
+    <b>un pipeline qui atteint son but mesurable, avec une méthodologie solide et une utilité
+    démontrée en aval, dont le surdimensionnement est documenté et chiffré, et dont la comparaison
+    décisive reste à faire.</b> C'est une position bien plus solide que de revendiquer une
+    supériorité de méthode que les données ne montrent pas.</p>
+  </div>
+
+  <h3>16.1 · Les cinq actions suivantes, par rapport valeur / coût</h3>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th class="num">#</th><th>Action</th><th class="num">Coût</th><th>Ce que ça règle</th></tr></thead>
+  <tbody>
+    <tr class="hi"><td class="num">1</td><td><b>Mesurer le niveau dB(A) et la position du micro dans la cellule</b>, et enregistrer le bruit du servo KUKA</td><td class="num">1 journée<br>+ 2 h</td><td>détermine si la cible est −18 dB ou +8 dB — <b>change toutes les priorités</b>, et débloque <code>snr_range</code>, la famille <code>in_domain</code> et l'enveloppe opérationnelle</td></tr>
+    <tr><td class="num">2</td><td><b>Brancher le détecteur d'effondrement</b> (κ hors blanc + symboles distincts)</td><td class="num">~1 h</td><td>le seul point réellement bloquant côté code : une tête muette en production est une panne totale et silencieuse</td></tr>
+    <tr><td class="num">3</td><td><b>Baseline simple</b> : WavLM affiné sur les mêmes données bruitées, sans professeurs ni distillation</td><td class="num">1 run ~5 h</td><td>l'attribution du gain — le trou le plus grave du dossier scientifique</td></tr>
+    <tr><td class="num">4</td><td><b>Enregistrer les commandes par plusieurs opérateurs</b></td><td class="num">1 journée</td><td>la seule limite qui empêche aujourd'hui toute affirmation de généralisation du RAP</td></tr>
+    <tr><td class="num">5</td><td><b>Committer l'ensemble du travail</b> et corriger le <code>config.json</code></td><td class="num">1 h</td><td>la reproductibilité, qui ne tient aujourd'hui qu'à ce dossier</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<hr class="div">
+
+<!-- ══════════════════ 17 ══════════════════ -->
+<section id="s17">
+<div class="prose">
+  <span class="secnum">§ 17</span>
+  <h2 class="sec">Reproduire</h2>
+  <p class="standfirst">Toutes les commandes partent de la racine du projet, avec l'interpréteur
+  du <code>venv</code> (torch 2.7.1+cu118, transformers 5.10.2, RTX 4090 24 Go).</p>
+</div>
+<pre><code># ── Contrôles préalables — BLOQUANTS ────────────────────────────────────
+python -m models_best.data.data_loader_multinoise      # invariants MULTINOISE : 97/97 attendus
+python models_best/data/rir.py                         # T30 ≈ 0,7 s
+python models_best/data/noise_pool.py                  # 9 668 fichiers, 8 familles
+python -m models_best.tests.test_end2end               # 23/23 attendus
+python -m models_best.train.monitor                    # 6 pathologies détectées, 0 fausse alerte
+
+# ── 1 · Phases 1 et 2 — le professorat  (≈ 2,6 h) ───────────────────────
+python -m models_best.train.train --phase all --p1 33 --p2 37 --p3 0 \
+    --taps 6 8 12 --corpus-melange --pp-eval-p3 --tag p1p2_
+
+# ── 2 · Phase 3 — l'étudiant, le livrable  (≈ 1 h) ──────────────────────
+python -m models_best.train.train --phase 3 \
+    --resume results/training_run_p1p2_&lt;stamp&gt;/ckpt_p2_ep37.pt \
+    --re-layers 4 --taps 6 8 12 --corpus-melange --pp-eval-p3 --sonde-graines 5
+
+# ── 3 · Tête CTC déployée ───────────────────────────────────────────────
+python -m models_best.rap.entrainer_tete
+
+# ── 4 · Vérifications et mesures du présent rapport ─────────────────────
+python models_best/extraits/p7_grilles_corrigees.py    # grille PER × SNR, instrument corrigé
+python models_best/extraits/p8_taux_effondrement.py    # 20 graines, taux d'effondrement
+python models_best/rap/evaluer.py                      # tâche aval : rang-1 / juste / fausse acc.
+python models_best/extraits/p11_wer_avant_apres.py     # WER de la chaîne robot, avant / après
+python models_best/eval/courbe_budget_re.py            # courbe de budget de la sonde</code></pre>
+
+<div class="prose">
+  <h3>17.1 · Où lire quoi</h3>
+</div>
+<div class="tw">
+<table>
+  <thead><tr><th>Question</th><th>Fichier</th></tr></thead>
+  <tbody>
+    <tr><td>Qu'est-ce qui constitue le système livré ?</td><td><code>VERSION_FINALE.md</code> — le manifeste</td></tr>
+    <tr><td>Pourquoi chaque décision a été prise, et comment elle est falsifiable</td><td><code>DECISIONS.md</code> — D-000 à D-051</td></tr>
+    <tr><td>Les chiffres relus depuis les fichiers de mesure</td><td><code>RECAP_VERIFIE_2026-08-15.md</code></td></tr>
+    <tr><td>Le verdict sur l'Objectif 1</td><td><code>CONCLUSION_OBJECTIF1_2026-08-15.md</code></td></tr>
+    <tr><td>La tâche aval, en détail</td><td><code>TACHE_AVAL_2026-08-18.md</code></td></tr>
+    <tr><td>Les mesures corrigées du 18 août</td><td><code>extraits/</code> — grilles, effondrement, WER</td></tr>
+    <tr><td>La théorie et ses réserves</td><td><code>docs/THEORIE.md</code>, <code>docs/DEFIS.md</code></td></tr>
+    <tr><td>Les trois audits internes</td><td><code>audit/</code>, <code>audit2/</code>, <code>audit3/</code></td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<footer>
+  <div class="prose">
+    <p><b>models_best</b> — Objectif spécifique 1 de la chaîne de commande vocale KUKA KR50.
+    Toutes les valeurs de ce document sont relues depuis les fichiers de mesure du dépôt
+    (<code>extraits/*.json</code>, <code>results/*.json</code>, <code>rap/*.json</code>), jamais
+    recopiées d'un rapport antérieur. Les mesures antérieures au 18 août 2026 qui portaient des
+    étiquettes de SNR biaisées ne sont pas citées ici.</p>
+  </div>
+</footer>
+
+</main>
+</div>
+</div>
+
+<div class="tip" id="tip" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+/* ══════════════════════════════════════════════════════════════════════════
+   Données — toutes relues depuis les fichiers de mesure du dépôt.
+   extraits/grilles_corrigees.json · extraits/taux_effondrement.json
+   rap/evaluation*.json · extraits/wer_avant_apres.json · results/courbe_budget_re.json
+   ══════════════════════════════════════════════════════════════════════════ */
+const SNRS = ["propre","+15 dB","+10 dB","+5 dB","+0 dB","-5 dB","-10 dB","-20 dB"];
+const XLAB = ["propre","+15","+10","+5","0","−5","−10","−20"];
+const FAMS = {pool:"pool — familles vues", blanc:"bruit blanc — inédit", atelier:"atelier réel — inédit"};
+
+const MODELS = [
+  {k:"RE_livre",    n:"RE livré · 4 couches",      s:"RE livré",      c:"var(--s1)", w:2.6},
+  {k:"WavLM_c4",    n:"WavLM c4 · son initialisation", s:"WavLM c4",  c:"var(--s2)", w:2},
+  {k:"DistilHuBERT",n:"DistilHuBERT · publié",     s:"DistilHuBERT", c:"var(--s3)", w:2},
+  {k:"CtrlPublic",  n:"Contrôle sans Phases 1–2",  s:"Contrôle",     c:"var(--s4)", w:2},
+  {k:"RunB",        n:"Run B · 2 couches",         s:"Run B",        c:"var(--s5)", w:2}
+];
+
+const GRID = {"RE_livre":{"pool":{"propre":0.3445,"+15 dB":0.3983,"+10 dB":0.4344,"+5 dB":0.5008,"+0 dB":0.6196,"-5 dB":0.7776,"-10 dB":0.9175,"-20 dB":0.9907},"blanc":{"propre":null,"+15 dB":0.4483,"+10 dB":0.5096,"+5 dB":0.5811,"+0 dB":0.6852,"-5 dB":0.8223,"-10 dB":0.9605,"-20 dB":0.9995},"atelier":{"propre":0.3445,"+15 dB":0.4331,"+10 dB":0.4885,"+5 dB":0.5764,"+0 dB":0.7083,"-5 dB":0.8639,"-10 dB":0.9714,"-20 dB":0.9976}},
+"WavLM_c4":{"pool":{"propre":0.319,"+15 dB":0.4501,"+10 dB":0.534,"+5 dB":0.6494,"+0 dB":0.7672,"-5 dB":0.8422,"-10 dB":0.8925,"-20 dB":0.9445},"blanc":{"propre":null,"+15 dB":0.572,"+10 dB":0.7161,"+5 dB":0.8598,"+0 dB":0.9643,"-5 dB":0.9978,"-10 dB":0.9999,"-20 dB":0.9998},"atelier":{"propre":0.319,"+15 dB":0.5392,"+10 dB":0.6756,"+5 dB":0.8314,"+0 dB":0.955,"-5 dB":0.9917,"-10 dB":0.9985,"-20 dB":0.9995}},
+"DistilHuBERT":{"pool":{"propre":0.3233,"+15 dB":0.4875,"+10 dB":0.5957,"+5 dB":0.7201,"+0 dB":0.8196,"-5 dB":0.8818,"-10 dB":0.9192,"-20 dB":0.9604},"blanc":{"propre":null,"+15 dB":0.6439,"+10 dB":0.7929,"+5 dB":0.9146,"+0 dB":0.9859,"-5 dB":0.9995,"-10 dB":1.0,"-20 dB":1.0},"atelier":{"propre":0.3233,"+15 dB":0.5986,"+10 dB":0.7589,"+5 dB":0.9091,"+0 dB":0.9823,"-5 dB":0.9974,"-10 dB":0.9996,"-20 dB":1.0}},
+"CtrlPublic":{"pool":{"propre":0.3054,"+15 dB":0.3898,"+10 dB":0.4753,"+5 dB":0.7404,"+0 dB":1.1545,"-5 dB":1.3854,"-10 dB":1.46,"-20 dB":1.4558},"blanc":{"propre":null,"+15 dB":0.4353,"+10 dB":0.5431,"+5 dB":0.793,"+0 dB":1.4475,"-5 dB":1.7825,"-10 dB":1.7976,"-20 dB":1.8634},"atelier":{"propre":0.3054,"+15 dB":0.4221,"+10 dB":0.547,"+5 dB":0.927,"+0 dB":1.582,"-5 dB":1.7541,"-10 dB":1.7328,"-20 dB":1.7128}},
+"RunB":{"pool":{"propre":0.529,"+15 dB":0.5738,"+10 dB":0.6,"+5 dB":0.6456,"+0 dB":0.7208,"-5 dB":0.8294,"-10 dB":0.9204,"-20 dB":0.9877},"blanc":{"propre":null,"+15 dB":0.6137,"+10 dB":0.6474,"+5 dB":0.6927,"+0 dB":0.7517,"-5 dB":0.8456,"-10 dB":0.9509,"-20 dB":0.9999},"atelier":{"propre":0.529,"+15 dB":0.603,"+10 dB":0.64,"+5 dB":0.6952,"+0 dB":0.7786,"-5 dB":0.8936,"-10 dB":0.9685,"-20 dB":0.9978}}};
+
+const SEEDS = {
+ "Run A · 2 couches":[0.4530,0.4591,0.4548,0.4545,0.4652,0.9549,0.4664,0.4650,0.4589,0.9525,0.4637,0.9193,0.9564,0.4692,0.4529,0.5394,0.4651,0.4540,0.4659,0.4511],
+ "Run B · 2 couches":[0.4121,0.9548,0.4147,0.4188,0.4163,0.4172,0.9586,0.4203,0.4145,0.9539,0.4234,0.9573,0.4285,0.4267,0.4181,0.4216,0.4195,0.4152,0.4267,0.9538],
+ "RE livré · 4 couches":[0.3214,0.3230,0.3203,0.4030,0.3238,0.3216,0.3205,0.8774,0.3261,0.3228,0.3221,0.3263,0.3247,0.3900,0.3246,0.3180,0.3243,0.3216,0.3231,0.3261]
+};
+
+const ABL = [
+ {n:"M6 · meilleur PP + masquage coupé", per:0.4420, d:-0.0127, t:"meilleure combinaison"},
+ {n:"M3b · sélection du meilleur PP",     per:0.4451, d:-0.0096, t:"sélectionner paie"},
+ {n:"M5 · masquage du PP coupé (P3)",     per:0.4488, d:-0.0059, t:"le masquage coûtait du contenu"},
+ {n:"M3a · contrôle",                     per:0.4547, d:0,       t:"référence"},
+ {n:"M2 · sans ℒ_PAE",                    per:0.4549, d:+0.0002, t:"canal inutile"},
+ {n:"M4 · sans ℒ_PE",                     per:0.4658, d:+0.0111, t:"canal indispensable"},
+ {n:"M8 · PA dégelés en Phase 2",         per:0.9782, d:+0.5235, t:"pire que le hasard"}
+];
+
+const BUDGET = [
+ {x:"2 000 × 15 ép",  sub:"2 000 én.",   it:1875,  e:0.4530, m:0.8803},
+ {x:"6 000 × 15 ép",  sub:"6 000 én.",   it:5625,  e:0.4086, m:0.9251},
+ {x:"12 000 × 15 ép", sub:"12 000 én.",  it:11250, e:0.3910, m:0.8990},
+ {x:"14 404 × 15 ép", sub:"14 404 én.",  it:13500, e:0.3893, m:0.9094},
+ {x:"14 404 × 34 ép", sub:"14 404 × 34", it:30600, e:0.3762, m:0.9093}
+];
+
+const RAP = {x:["propre","+15","+10","+5","0","−5"], re:[100,100,100,96,76,28], init:[100,100,96,72,36,12]};
+const WER = {x:["−10","−5","0","+5","+10","+15"], avant:[0.766,0.377,0.131,0.083,0.050,0.100], apres:[0.766,0.311,0.038,0.000,0.000,0.000]};
+
+/* ══ Utilitaires ══════════════════════════════════════════════════════════ */
+const NF = (v,d=4)=> v===null||v===undefined ? "—" : v.toFixed(d).replace(".",",");
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+const tip = document.getElementById("tip");
+function showTip(html, ev){
+  tip.innerHTML = html; tip.style.opacity = 1;
+  const r = tip.getBoundingClientRect();
+  let x = ev.clientX + 14, y = ev.clientY - r.height - 10;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - 14;
+  if (y < 8) y = ev.clientY + 18;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip(){ tip.style.opacity = 0; }
+
+/* ══ Graphique en lignes — PER × SNR ══════════════════════════════════════ */
+const W = 860, H = 400, M = {t:16, r:132, b:46, l:52};
+const YMIN = 0.2, YMAX = 1.2;
+const px = i => M.l + i * (W - M.l - M.r) / (XLAB.length - 1);
+const py = v => M.t + (1 - (Math.min(v, YMAX) - YMIN) / (YMAX - YMIN)) * (H - M.t - M.b);
+
+let famCourante = "pool";
+
+function drawGrid(){
+  const fam = famCourante;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="PER en fonction du SNR pour cinq encodeurs, famille ${esc(FAMS[fam])}. Le tableau sous le graphique donne toutes les valeurs." style="width:100%;height:auto">`;
+  // grille
+  for (let v = 0.2; v <= 1.2001; v += 0.2){
+    s += `<line x1="${M.l}" y1="${py(v).toFixed(1)}" x2="${W-M.r}" y2="${py(v).toFixed(1)}" stroke="var(--grid)" stroke-width="1"/>`;
+    s += `<text x="${M.l-10}" y="${(py(v)+4).toFixed(1)}" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="10.5" fill="var(--muted)">${v.toFixed(1).replace(".",",")}</text>`;
+  }
+  // hasard
+  s += `<line x1="${M.l}" y1="${py(0.9598).toFixed(1)}" x2="${W-M.r}" y2="${py(0.9598).toFixed(1)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="5 4"/>`;
+  s += `<text x="${M.l+8}" y="${(py(0.9598)-6).toFixed(1)}" text-anchor="start" font-family="IBM Plex Mono,monospace" font-size="10" fill="var(--muted)">hasard 0,960 — au-dessus, non informatif</text>`;
+  // axe x
+  XLAB.forEach((l,i)=>{
+    s += `<text x="${px(i).toFixed(1)}" y="${H-M.b+20}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="11" fill="var(--muted)">${l}</text>`;
+  });
+  s += `<text x="${((M.l+W-M.r)/2).toFixed(0)}" y="${H-6}" text-anchor="middle" font-family="IBM Plex Sans Condensed,sans-serif" font-size="11.5" fill="var(--muted)">SNR (dB) — région active du signal</text>`;
+  s += `<text transform="translate(14,${(M.t+(H-M.t-M.b)/2).toFixed(0)}) rotate(-90)" text-anchor="middle" font-family="IBM Plex Sans Condensed,sans-serif" font-size="11.5" fill="var(--muted)">PER — plus bas est meilleur</text>`;
+  // séries
+  const etiq = [];
+  MODELS.forEach(m=>{
+    const vals = SNRS.map(sn => GRID[m.k][fam][sn]);
+    let d = "", started = false, last = null;
+    vals.forEach((v,i)=>{
+      if (v === null) return;
+      d += (started ? "L" : "M") + px(i).toFixed(1) + " " + py(v).toFixed(1) + " ";
+      started = true; last = i;
+    });
+    s += `<path d="${d}" fill="none" stroke="${m.c}" stroke-width="${m.w}" stroke-linejoin="round" stroke-linecap="round"/>`;
+    vals.forEach((v,i)=>{
+      if (v === null) return;
+      const clip = v > YMAX;
+      if (clip){
+        s += `<path d="M${px(i)-5},${M.t+7} L${px(i)},${M.t} L${px(i)+5},${M.t+7} Z" fill="${m.c}"/>`;
+      } else {
+        s += `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="3.4" fill="var(--chart)" stroke="${m.c}" stroke-width="2"/>`;
+      }
+    });
+    if (last !== null) etiq.push({y: py(vals[last]), t: m.s, c: m.c});
+  });
+  // désempilage vertical des étiquettes directes
+  etiq.sort((a,b)=>a.y-b.y);
+  for (let i=1;i<etiq.length;i++){
+    if (etiq[i].y - etiq[i-1].y < 14) etiq[i].y = etiq[i-1].y + 14;
+  }
+  etiq.forEach(e=>{
+    s += `<text x="${W-M.r+10}" y="${(e.y+4).toFixed(1)}" font-family="IBM Plex Sans Condensed,sans-serif" font-size="11" fill="${e.c}">${esc(e.t)}</text>`;
+  });
+  // zones de survol
+  XLAB.forEach((l,i)=>{
+    const w = (W - M.l - M.r) / (XLAB.length - 1);
+    s += `<rect class="hz" data-i="${i}" x="${(px(i)-w/2).toFixed(1)}" y="${M.t}" width="${w.toFixed(1)}" height="${H-M.t-M.b}" fill="transparent"/>`;
+  });
+  s += `</svg>`;
+  const host = document.getElementById("ch-grid");
+  host.innerHTML = s;
+  host.querySelectorAll(".hz").forEach(z=>{
+    z.addEventListener("mousemove", ev=>{
+      const i = +z.dataset.i;
+      let h = `<b>${XLAB[i] === "propre" ? "audio propre" : XLAB[i] + " dB"}</b> · ${esc(FAMS[fam].split(" — ")[0])}<br>`;
+      MODELS.forEach(m=>{
+        const v = GRID[m.k][fam][SNRS[i]];
+        h += `<span style="color:${m.c}">■</span> ${esc(m.s)} &nbsp;<b>${NF(v)}</b><br>`;
+      });
+      showTip(h, ev);
+    });
+    z.addEventListener("mouseleave", hideTip);
+  });
+  // tableau
+  let t = `<table><thead><tr><th>Encodeur</th>${XLAB.map(l=>`<th class="num">${l}</th>`).join("")}</tr></thead><tbody>`;
+  MODELS.forEach(m=>{
+    t += `<tr${m.k==="RE_livre"?' class="hi"':""}><td>${esc(m.n)}</td>` +
+      SNRS.map(sn=>`<td class="num">${NF(GRID[m.k][fam][sn])}</td>`).join("") + `</tr>`;
+  });
+  t += `</tbody><caption>Famille <b>${esc(FAMS[fam])}</b> · moyenne de 5 graines · n = 200 énoncés par cellule.</caption></table>`;
+  document.getElementById("tb-grid").innerHTML = `<div class="tw">${t}</div>`;
+}
+
+document.getElementById("lg-grid").innerHTML = MODELS.map(m =>
+  `<span><i style="background:${m.c}"></i>${esc(m.n)}</span>`).join("");
+document.querySelectorAll("[data-fam]").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll("[data-fam]").forEach(o=>o.setAttribute("aria-pressed","false"));
+    b.setAttribute("aria-pressed","true");
+    famCourante = b.dataset.fam;
+    drawGrid();
+  });
+});
+drawGrid();
+
+/* ══ Tableau complet — les trois familles ═════════════════════════════════ */
+(function(){
+  let t = `<table><thead><tr><th>Famille</th><th>Encodeur</th>${XLAB.map(l=>`<th class="num">${l}</th>`).join("")}</tr></thead><tbody>`;
+  Object.keys(FAMS).forEach(f=>{
+    MODELS.forEach((m,j)=>{
+      t += `<tr${m.k==="RE_livre"?' class="hi"':""}>` +
+        (j===0 ? `<td rowspan="${MODELS.length}"><b>${esc(FAMS[f].split(" — ")[0])}</b><br><span class="u">${esc(FAMS[f].split(" — ")[1]||"")}</span></td>` : "") +
+        `<td>${esc(m.n)}</td>` + SNRS.map(sn=>`<td class="num">${NF(GRID[m.k][f][sn])}</td>`).join("") + `</tr>`;
+    });
+  });
+  t += `</tbody><caption>PER macro, moyenne de 5 graines, 200 énoncés par cellule, encodeurs gelés,
+  tête linéaire identique entraînée sur audio propre au même budget. SNR calculé sur la
+  <b>région active</b>, bourrage laissé à zéro. La famille <code>pool</code> est vue à
+  l'entraînement ; <code>blanc</code> et <code>atelier</code> ne le sont jamais.
+  <b>Toute cellule au-dessus de 0,9598 n'est pas informative</b> — le modèle y est au niveau du
+  hasard, et l'écart entre encodeurs n'y a plus de sens.</caption></table>`;
+  document.getElementById("tb-full").innerHTML = t;
+})();
+
+/* ══ Barres divergentes — gain du RE contre son initialisation ════════════ */
+(function(){
+  const rows = SNRS.map(sn=>{
+    const ds = Object.keys(FAMS).map(f=>{
+      const a = GRID.RE_livre[f][sn], b = GRID.WavLM_c4[f][sn];
+      return (a===null||b===null) ? null : a-b;
+    }).filter(v=>v!==null);
+    return {sn, lab: sn==="propre" ? "propre" : sn.replace(" dB","").replace("+0","0").replace("-","−"),
+            v: ds.reduce((x,y)=>x+y,0)/ds.length, n: ds.length};
+  });
+  const w=860, h=300, m={t:26,r:20,b:44,l:74};
+  const lo=-0.36, hi=0.06;
+  const X = v => m.l + (v-lo)/(hi-lo)*(w-m.l-m.r);
+  const bw = (h-m.t-m.b)/rows.length;
+  let s = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Écart de PER entre le réseau étudiant et son initialisation, par niveau de SNR ; négatif signifie que l'étudiant est meilleur." style="width:100%;height:auto">`;
+  for(let v=-0.30; v<=0.0601; v+=0.06){
+    const gx=X(v).toFixed(1);
+    s+=`<line x1="${gx}" y1="${m.t}" x2="${gx}" y2="${h-m.b}" stroke="var(--grid)"/>`;
+    s+=`<text x="${gx}" y="${h-m.b+18}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10.5" fill="var(--muted)">${(v>0?"+":"")+v.toFixed(2).replace(".",",")}</text>`;
+  }
+  s+=`<line x1="${X(0).toFixed(1)}" y1="${m.t}" x2="${X(0).toFixed(1)}" y2="${h-m.b}" stroke="var(--rule-2)" stroke-width="1.5"/>`;
+  s+=`<text x="${X(-0.18).toFixed(1)}" y="${m.t-10}" text-anchor="middle" font-family="IBM Plex Sans Condensed,sans-serif" font-size="11.5" fill="var(--pos)">◄ le RE est meilleur</text>`;
+  s+=`<text x="${X(0.035).toFixed(1)}" y="${m.t-10}" text-anchor="middle" font-family="IBM Plex Sans Condensed,sans-serif" font-size="11.5" fill="var(--neg)">il paie ►</text>`;
+  rows.forEach((r,i)=>{
+    const y = m.t + i*bw + 5, bh = bw-10;
+    const x0 = Math.min(X(0),X(r.v)), x1=Math.max(X(0),X(r.v));
+    const col = r.v<0 ? "var(--pos)" : "var(--neg)";
+    s+=`<rect class="gb" data-i="${i}" x="${x0.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1.5,x1-x0).toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${col}"/>`;
+    s+=`<text x="${m.l-12}" y="${(y+bh/2+4).toFixed(1)}" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="11.5" fill="var(--ink-2)">${r.lab}</text>`;
+    const tx = r.v<0 ? x0-7 : x1+7, an = r.v<0 ? "end":"start";
+    s+=`<text x="${tx.toFixed(1)}" y="${(y+bh/2+4).toFixed(1)}" text-anchor="${an}" font-family="IBM Plex Mono,monospace" font-size="11" fill="var(--ink)">${(r.v>0?"+":"−")+Math.abs(r.v).toFixed(3).replace(".",",")}</text>`;
+  });
+  s+=`</svg>`;
+  const host=document.getElementById("ch-gain"); host.innerHTML=s;
+  host.querySelectorAll(".gb").forEach(b=>{
+    b.addEventListener("mousemove",ev=>{
+      const r=rows[+b.dataset.i];
+      let h2=`<b>${r.lab==="propre"?"audio propre":r.lab+" dB"}</b><br>moyenne sur ${r.n} famille(s)<br>écart <b>${(r.v>0?"+":"−")+Math.abs(r.v).toFixed(4).replace(".",",")}</b><br>`;
+      Object.keys(FAMS).forEach(f=>{
+        const a=GRID.RE_livre[f][r.sn], c=GRID.WavLM_c4[f][r.sn];
+        if(a===null||c===null) return;
+        h2+=`${esc(f)} : ${NF(a,3)} vs ${NF(c,3)}<br>`;
+      });
+      showTip(h2,ev);
+    });
+    b.addEventListener("mouseleave",hideTip);
+  });
+  let t=`<table><thead><tr><th>Famille</th>${SNRS.map(s2=>`<th class="num">${s2.replace(" dB","")}</th>`).join("")}</tr></thead><tbody>`;
+  Object.keys(FAMS).forEach(f=>{
+    t+=`<tr><td>${esc(f)}</td>`+SNRS.map(sn=>{
+      const a=GRID.RE_livre[f][sn], b2=GRID.WavLM_c4[f][sn];
+      if(a===null||b2===null) return `<td class="num">—</td>`;
+      const d=a-b2;
+      return `<td class="num" style="color:${d<0?'var(--pos)':'var(--neg)'}">${(d>0?"+":"−")+Math.abs(d).toFixed(4).replace(".",",")}</td>`;
+    }).join("")+`</tr>`;
+  });
+  t+=`</tbody><caption>Écart RE − WavLM c4 par cellule. Négatif = le RE est meilleur.</caption></table>`;
+  document.getElementById("tb-gain").innerHTML=`<div class="tw">${t}</div>`;
+})();
+
+/* ══ Nuage de graines ═════════════════════════════════════════════════════ */
+(function(){
+  const keys=Object.keys(SEEDS), w=860, h=250, m={t:24,r:26,b:44,l:172};
+  const lo=0.30, hi=1.0;
+  const X=v=>m.l+(v-lo)/(hi-lo)*(w-m.l-m.r);
+  const rowH=(h-m.t-m.b)/keys.length;
+  let s=`<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Vingt graines de sonde pour trois modèles ; les points au-delà de 0,85 sont des têtes effondrées au niveau du hasard." style="width:100%;height:auto">`;
+  for(let v=0.3;v<=1.0001;v+=0.1){
+    s+=`<line x1="${X(v).toFixed(1)}" y1="${m.t}" x2="${X(v).toFixed(1)}" y2="${h-m.b}" stroke="var(--grid)"/>`;
+    s+=`<text x="${X(v).toFixed(1)}" y="${h-m.b+18}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10.5" fill="var(--muted)">${v.toFixed(1).replace(".",",")}</text>`;
+  }
+  s+=`<line x1="${X(0.85).toFixed(1)}" y1="${m.t}" x2="${X(0.85).toFixed(1)}" y2="${h-m.b}" stroke="var(--neg)" stroke-dasharray="5 4"/>`;
+  s+=`<text x="${(X(0.85)+7).toFixed(1)}" y="${m.t+12}" font-family="IBM Plex Mono,monospace" font-size="10" fill="var(--neg)">seuil d'effondrement</text>`;
+  s+=`<text x="${((m.l+w-m.r)/2).toFixed(0)}" y="${h-6}" text-anchor="middle" font-family="IBM Plex Sans Condensed,sans-serif" font-size="11.5" fill="var(--muted)">PER de la tête, sur audio propre</text>`;
+  keys.forEach((k,i)=>{
+    const y=m.t+i*rowH+rowH/2;
+    const col=i===2?"var(--s1)":(i===1?"var(--s5)":"var(--s4)");
+    s+=`<text x="${m.l-14}" y="${(y+4).toFixed(1)}" text-anchor="end" font-family="IBM Plex Sans Condensed,sans-serif" font-size="12" fill="var(--ink-2)">${esc(k)}</text>`;
+    s+=`<line x1="${m.l}" y1="${y.toFixed(1)}" x2="${w-m.r}" y2="${y.toFixed(1)}" stroke="var(--rule)"/>`;
+    SEEDS[k].forEach((v,j)=>{
+      const eff=v>=0.85;
+      s+=`<circle class="sd" data-k="${i}" data-j="${j}" cx="${X(v).toFixed(1)}" cy="${y.toFixed(1)}" r="${eff?5:4.5}" fill="${eff?"var(--neg)":col}" fill-opacity="${eff?1:.55}" stroke="var(--chart)" stroke-width="1.6"/>`;
+    });
+    const sains=SEEDS[k].filter(v=>v<0.85);
+    const mu=sains.reduce((a,b)=>a+b,0)/sains.length;
+    s+=`<line x1="${X(mu).toFixed(1)}" y1="${(y-14).toFixed(1)}" x2="${X(mu).toFixed(1)}" y2="${(y+14).toFixed(1)}" stroke="${col}" stroke-width="2.2"/>`;
+    s+=`<text x="${X(mu).toFixed(1)}" y="${(y-19).toFixed(1)}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10.5" fill="var(--ink)">${mu.toFixed(4).replace(".",",")}</text>`;
+    s+=`<text x="${(w-m.r).toFixed(1)}" y="${(y+22).toFixed(1)}" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="10" fill="var(--neg)">${SEEDS[k].filter(v=>v>=0.85).length}/20 effondrées</text>`;
+  });
+  s+=`</svg>`;
+  const host=document.getElementById("ch-seeds"); host.innerHTML=s;
+  host.querySelectorAll(".sd").forEach(c=>{
+    c.addEventListener("mousemove",ev=>{
+      const k=keys[+c.dataset.k], j=+c.dataset.j, v=SEEDS[k][j];
+      showTip(`<b>${esc(k)}</b><br>graine ${j} · PER <b>${NF(v)}</b>${v>=0.85?"<br><span style='color:var(--neg)'>tête effondrée</span>":""}`,ev);
+    });
+    c.addEventListener("mouseleave",hideTip);
+  });
+})();
+
+/* ══ Ablations ════════════════════════════════════════════════════════════ */
+(function(){
+  const w=860, h=330, m={t:30,r:150,b:44,l:250};
+  const lo=-0.016, hi=0.016;
+  const X=v=>m.l+(Math.max(lo,Math.min(hi,v))-lo)/(hi-lo)*(w-m.l-m.r);
+  const rowH=(h-m.t-m.b)/ABL.length;
+  let s=`<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Contribution de chaque composant mesurée par ablation, en écart de PER par rapport au contrôle." style="width:100%;height:auto">`;
+  for(let v=-0.015;v<=0.0151;v+=0.005){
+    s+=`<line x1="${X(v).toFixed(1)}" y1="${m.t}" x2="${X(v).toFixed(1)}" y2="${h-m.b}" stroke="var(--grid)"/>`;
+    s+=`<text x="${X(v).toFixed(1)}" y="${h-m.b+18}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10.5" fill="var(--muted)">${(v>0?"+":v<0?"−":"")+Math.abs(v).toFixed(3).replace(".",",")}</text>`;
+  }
+  s+=`<line x1="${X(0).toFixed(1)}" y1="${m.t}" x2="${X(0).toFixed(1)}" y2="${h-m.b}" stroke="var(--rule-2)" stroke-width="1.5"/>`;
+  s+=`<text x="${X(-0.008).toFixed(1)}" y="${m.t-12}" text-anchor="middle" font-family="IBM Plex Sans Condensed,sans-serif" font-size="11.5" fill="var(--pos)">◄ améliore</text>`;
+  s+=`<text x="${X(0.008).toFixed(1)}" y="${m.t-12}" text-anchor="middle" font-family="IBM Plex Sans Condensed,sans-serif" font-size="11.5" fill="var(--neg)">dégrade ►</text>`;
+  ABL.forEach((a,i)=>{
+    const y=m.t+i*rowH+6, bh=rowH-12;
+    const clip=Math.abs(a.d)>hi;
+    const x0=Math.min(X(0),X(a.d)), x1=Math.max(X(0),X(a.d));
+    const col=a.d<0?"var(--pos)":(a.d===0?"var(--mid)":"var(--neg)");
+    s+=`<rect class="ab" data-i="${i}" x="${x0.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(2,x1-x0).toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${col}"/>`;
+    if(clip) s+=`<path d="M${(x1+4)},${y+bh/2-7} L${(x1+16)},${y+bh/2} L${(x1+4)},${y+bh/2+7} Z" fill="${col}"/>`;
+    s+=`<text x="${m.l-14}" y="${(y+bh/2+4).toFixed(1)}" text-anchor="end" font-family="IBM Plex Sans Condensed,sans-serif" font-size="12" fill="var(--ink-2)">${esc(a.n)}</text>`;
+    const lx=clip?x1+22:(a.d<0?x0-8:x1+8), an=(a.d<0&&!clip)?"end":"start";
+    s+=`<text x="${lx.toFixed(1)}" y="${(y+bh/2+4).toFixed(1)}" text-anchor="${an}" font-family="IBM Plex Mono,monospace" font-size="11" fill="var(--ink)">${a.d===0?"référence":(a.d>0?"+":"−")+Math.abs(a.d).toFixed(4).replace(".",",")}</text>`;
+  });
+  s+=`<text x="${((m.l+w-m.r)/2).toFixed(0)}" y="${h-6}" text-anchor="middle" font-family="IBM Plex Sans Condensed,sans-serif" font-size="11.5" fill="var(--muted)">écart de PER par rapport au contrôle M3a (0,4547)</text>`;
+  s+=`</svg>`;
+  const host=document.getElementById("ch-abl"); host.innerHTML=s;
+  host.querySelectorAll(".ab").forEach(b=>{
+    b.addEventListener("mousemove",ev=>{
+      const a=ABL[+b.dataset.i];
+      showTip(`<b>${esc(a.n)}</b><br>PER <b>${NF(a.per)}</b><br>écart ${a.d===0?"—":(a.d>0?"+":"−")+Math.abs(a.d).toFixed(4).replace(".",",")}<br><span style="color:var(--muted)">${esc(a.t)}</span>`,ev);
+    });
+    b.addEventListener("mouseleave",hideTip);
+  });
+})();
+
+/* ══ Courbe de budget ═════════════════════════════════════════════════════ */
+(function(){
+  const w=860,h=330,m={t:22,r:112,b:64,l:56};
+  const xs=BUDGET.map(b=>b.it), lo=0, hi=32000;
+  const X=v=>m.l+(v-lo)/(hi-lo)*(w-m.l-m.r);
+  const Y=v=>m.t+(1-(v-0.3)/(1.0-0.3))*(h-m.t-m.b);
+  let s=`<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="PER de l'étudiant et de la référence MFCC en fonction du budget d'entraînement de la sonde." style="width:100%;height:auto">`;
+  for(let v=0.3;v<=1.0001;v+=0.1){
+    s+=`<line x1="${m.l}" y1="${Y(v).toFixed(1)}" x2="${w-m.r}" y2="${Y(v).toFixed(1)}" stroke="var(--grid)"/>`;
+    s+=`<text x="${m.l-10}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="10.5" fill="var(--muted)">${v.toFixed(1).replace(".",",")}</text>`;
+  }
+  [["e","var(--s1)","étudiant (RE)",2.6],["m","var(--s4)","MFCC-40",2]].forEach(([k,c,n,wd])=>{
+    let d="";
+    BUDGET.forEach((b,i)=>{ d+=(i?"L":"M")+X(b.it).toFixed(1)+" "+Y(b[k]).toFixed(1)+" "; });
+    s+=`<path d="${d}" fill="none" stroke="${c}" stroke-width="${wd}" stroke-linejoin="round"${k==="m"?' stroke-dasharray="6 4"':""}/>`;
+    BUDGET.forEach(b=>{ s+=`<circle cx="${X(b.it).toFixed(1)}" cy="${Y(b[k]).toFixed(1)}" r="3.6" fill="var(--chart)" stroke="${c}" stroke-width="2"/>`; });
+    const last=BUDGET[BUDGET.length-1];
+    s+=`<text x="${(w-m.r+9)}" y="${(Y(last[k])+4).toFixed(1)}" font-family="IBM Plex Sans Condensed,sans-serif" font-size="11.5" fill="${c}">${n}</text>`;
+  });
+  BUDGET.forEach((b,i)=>{
+    s+=`<text x="${X(b.it).toFixed(1)}" y="${h-m.b+18}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10" fill="var(--muted)">${(b.it/1000).toFixed(1).replace(".",",")}k</text>`;
+    s+=`<text x="${X(b.it).toFixed(1)}" y="${h-m.b+33}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9" fill="var(--muted)">${esc(b.sub)}</text>`;
+    s+=`<text x="${X(b.it).toFixed(1)}" y="${(Y(b.e)-11).toFixed(1)}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10.5" fill="var(--ink)">${b.e.toFixed(3).replace(".",",")}</text>`;
+    s+=`<rect class="bd" data-i="${i}" x="${(X(b.it)-26).toFixed(1)}" y="${m.t}" width="52" height="${h-m.t-m.b}" fill="transparent"/>`;
+  });
+  s+=`<text x="${((m.l+w-m.r)/2).toFixed(0)}" y="${h-8}" text-anchor="middle" font-family="IBM Plex Sans Condensed,sans-serif" font-size="11.5" fill="var(--muted)">itérations d'entraînement de la tête linéaire</text>`;
+  s+=`<line x1="${X(30600).toFixed(1)}" y1="${m.t}" x2="${X(30600).toFixed(1)}" y2="${h-m.b}" stroke="var(--muted)" stroke-dasharray="4 4"/>`;
+  s+=`<text x="${(X(30600)-8).toFixed(1)}" y="${m.t+13}" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="10" fill="var(--muted)">budget du protocole international</text>`;
+  s+=`</svg>`;
+  const host=document.getElementById("ch-budget"); host.innerHTML=s;
+  host.querySelectorAll(".bd").forEach(z=>{
+    z.addEventListener("mousemove",ev=>{
+      const b=BUDGET[+z.dataset.i];
+      showTip(`<b>${esc(b.x)}</b> · ${b.it.toLocaleString("fr")} itér.<br><span style="color:var(--s1)">■</span> étudiant <b>${NF(b.e)}</b><br><span style="color:var(--s4)">■</span> MFCC ${NF(b.m)}<br>écart <b>${NF(b.m-b.e)}</b>`,ev);
+    });
+    z.addEventListener("mouseleave",hideTip);
+  });
+})();
+
+/* ══ Barres groupées — générique ══════════════════════════════════════════ */
+function grouped(host, legendHost, cfg){
+  const {x, series, ymax, ylab, fmt, unite} = cfg;
+  const w=860, h=330, m={t:24,r:20,b:56,l:56};
+  const gw=(w-m.l-m.r)/x.length, bw=Math.min(46,(gw-16)/series.length);
+  const Y=v=>m.t+(1-v/ymax)*(h-m.t-m.b);
+  let s=`<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(cfg.aria)}" style="width:100%;height:auto">`;
+  const step=ymax/5;
+  for(let v=0;v<=ymax+1e-9;v+=step){
+    s+=`<line x1="${m.l}" y1="${Y(v).toFixed(1)}" x2="${w-m.r}" y2="${Y(v).toFixed(1)}" stroke="var(--grid)"/>`;
+    s+=`<text x="${m.l-10}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="10.5" fill="var(--muted)">${fmt(v)}</text>`;
+  }
+  x.forEach((lab,i)=>{
+    const cx=m.l+gw*i+gw/2;
+    s+=`<text x="${cx.toFixed(1)}" y="${h-m.b+20}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="11" fill="var(--muted)">${esc(lab)}</text>`;
+    series.forEach((se,k)=>{
+      const v=se.v[i];
+      const bx=cx-(series.length*bw+ (series.length-1)*2)/2 + k*(bw+2);
+      const by=Y(v), bh=Math.max(1.5,(h-m.b)-by);
+      s+=`<rect class="gr" data-i="${i}" data-k="${k}" x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${se.c}"/>`;
+      s+=`<text x="${(bx+bw/2).toFixed(1)}" y="${(by-6).toFixed(1)}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10" fill="var(--ink-2)">${fmt(v)}</text>`;
+    });
+  });
+  s+=`<line x1="${m.l}" y1="${(h-m.b).toFixed(1)}" x2="${w-m.r}" y2="${(h-m.b).toFixed(1)}" stroke="var(--rule-2)"/>`;
+  s+=`<text x="${((m.l+w-m.r)/2).toFixed(0)}" y="${h-8}" text-anchor="middle" font-family="IBM Plex Sans Condensed,sans-serif" font-size="11.5" fill="var(--muted)">${esc(cfg.xlab)}</text>`;
+  s+=`<text transform="translate(14,${(m.t+(h-m.t-m.b)/2).toFixed(0)}) rotate(-90)" text-anchor="middle" font-family="IBM Plex Sans Condensed,sans-serif" font-size="11.5" fill="var(--muted)">${esc(ylab)}</text>`;
+  s+=`</svg>`;
+  const el=document.getElementById(host); el.innerHTML=s;
+  el.querySelectorAll(".gr").forEach(b=>{
+    b.addEventListener("mousemove",ev=>{
+      const i=+b.dataset.i;
+      let t=`<b>${esc(x[i])}${unite||""}</b><br>`;
+      series.forEach(se=>{ t+=`<span style="color:${se.c}">■</span> ${esc(se.n)} &nbsp;<b>${fmt(se.v[i])}</b><br>`; });
+      showTip(t,ev);
+    });
+    b.addEventListener("mouseleave",hideTip);
+  });
+  if(legendHost) document.getElementById(legendHost).innerHTML =
+    series.map(se=>`<span><i style="background:${se.c}"></i>${esc(se.n)}</span>`).join("");
+}
+
+grouped("ch-rap","lg-rap",{
+  x:RAP.x, ymax:100, ylab:"commandes acceptées et justes (%)",
+  xlab:"SNR (dB) — bruit urbain simulé, jamais vu à l'entraînement", unite:" dB",
+  fmt:v=>Math.round(v)+" %",
+  aria:"Pourcentage de commandes acceptées et justes par niveau de SNR, pour le réseau étudiant et pour son initialisation.",
+  series:[{n:"RE livré",c:"var(--s1)",v:RAP.re},{n:"WavLM c4 — son initialisation",c:"var(--s2)",v:RAP.init}]
+});
+
+grouped("ch-wer","lg-wer",{
+  x:WER.x, ymax:0.8, ylab:"WER du texte reçu par l'agent",
+  xlab:"SNR (dB) — mêmes fichiers, même normalisation", unite:" dB",
+  fmt:v=>v.toFixed(2).replace(".",","),
+  aria:"Taux d'erreur de mots du texte transmis à l'agent, avant et après l'ajout du reconnaisseur models_best.",
+  series:[{n:"avant · VAD → Gemini",c:"var(--s2)",v:WER.avant},{n:"après · VAD → RAP → repli Gemini",c:"var(--s1)",v:WER.apres}]
+});
+</script>
+<div class="pagefoot">
+  <div class="in">
+    <span>Objectif spécifique 1 · chaîne de commande vocale KUKA KR50</span>
+    <span>Page publiée depuis <a href="https://github.com/mxhaned/Demo-interaction-vocale-kuka">github.com/mxhaned/Demo-interaction-vocale-kuka</a></span>
+    <span>Mise à jour du 08/09/2026</span>
+  </div>
+</div>
+<script>
+(function(){
+  var root = document.documentElement;
+  var boutons = document.querySelectorAll("[data-theme-set]");
+  function lire(){
+    try{ return localStorage.getItem("rapport-theme") || "auto"; }catch(e){ return "auto"; }
+  }
+  function appliquer(v){
+    if (v === "auto") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", v);
+    boutons.forEach(function(b){
+      b.setAttribute("aria-pressed", String(b.dataset.themeSet === v));
+    });
+  }
+  boutons.forEach(function(b){
+    b.addEventListener("click", function(){
+      var v = b.dataset.themeSet;
+      try{
+        if (v === "auto") localStorage.removeItem("rapport-theme");
+        else localStorage.setItem("rapport-theme", v);
+      }catch(e){}
+      appliquer(v);
+    });
+  });
+  appliquer(lire());
+
+  // À l'impression, on ouvre les tableaux repliés : un document imprimé ne se
+  // déplie pas. On les referme ensuite pour ne pas modifier l'écran.
+  var ouverts = [];
+  addEventListener("beforeprint", function(){
+    ouverts = [];
+    document.querySelectorAll("details:not([open])").forEach(function(d){
+      ouverts.push(d); d.open = true;
+    });
+  });
+  addEventListener("afterprint", function(){
+    ouverts.forEach(function(d){ d.open = false; });
+    ouverts = [];
+  });
+})();
+</script>
+</body>
+</html>
